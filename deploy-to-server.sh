@@ -14,7 +14,7 @@ echo "=== Deploying zagreb-buildings to ${SERVER_HOST} ==="
 echo "Pulling latest code..."
 ${SSH_CMD} "
     if [ ! -d ${REPO_PATH} ]; then
-        git clone https://github.com/simunkrmek/zagreb-buildings.git ${REPO_PATH}
+        git clone https://github.com/Poglavar/zagreb-buildings.git ${REPO_PATH}
     fi
     cd ${REPO_PATH} && git pull
 "
@@ -40,3 +40,7 @@ ${SSH_CMD} "
 echo "=== Deployment complete ==="
 echo "Frontend: https://zagreb.lol/zgrade"
 echo "API:      https://zagreb.lol/zgrade/api/buildings?bbox=15.95,45.80,16.00,45.82"
+echo ""
+echo "NOTE: nginx must serve index.html for deep link routes (/zgrade/{id})."
+echo "Add to your nginx location /zgrade block:"
+echo "  try_files \$uri \$uri/ /zgrade/index.html;"

@@ -1,55 +1,60 @@
 # Zagreb Buildings
 
-A public, open, building-level database for Zagreb focused on economic activity (jobs, visitors). Combines live data from multiple sources — Croatian cadastre, 3D building survey, OpenStreetMap — with crowdsourced user claims.
+Javna, otvorena baza podataka o zgradama u Zagrebu usmjerena na ekonomsku aktivnost (radna mjesta, korisnici). Kombinira podatke iz više izvora s korisničkim unosima.
 
-## Architecture
+Korisnički unos je slobodan, a jednom uneseni podaci su dostupni bez ograničenja bilo putem API-ja, bilo kao izvoz koji se jednom dnevno automatski sprema u [data/claims.json](https://github.com/Poglavar/zagreb-buildings/blob/main/data/claims.json)
 
-Data is **never duplicated**. Cadastre and OSM data are fetched live when a building is clicked. Only user-contributed claims are stored in the database.
+Svi podaci objavljeni su pod [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) licencom — javno dobro, bez ikakvih ograničenja korištenja.
 
-**Data sources:**
-- **Cadastre** (live) — building type, footprint area, geometry
-- **3D survey** (live) — building height, derived floor count
-- **OpenStreetMap** (live via Overpass API) — height, floors, name, building type, polygon
-- **User claims** (stored) — any field, with source attribution and optional supporting URL
+## Arhitektura
 
-**Stack:** Leaflet.js map viewer (static HTML), API served by [cadastre-data/api](../cadastre-data/api).
+Katastarski i OSM podaci dohvaćaju se uživo kad se klikne na zgradu. U bazi se pohranjuju samo korisnički unosi (claims).
 
-## Viewer
+**Izvori podataka:**
 
-The viewer is a standalone HTML file (`index.html`) that talks to the shared API. In production it's served as static files at `https://zagreb.lol/zgrade` with nginx proxying `/zgrade/api/` to the API server.
+- **Katastar** (uživo) — vrsta zgrade, površina tlocrta, geometrija
+- **3D izmjera** (uživo) — visina zgrade, procijenjeni broj katova
+- **OpenStreetMap** (uživo putem Overpass API-ja) — visina, katovi, naziv, vrsta zgrade, poligon
+- **Korisnički unosi** (pohranjeni) — bilo koje polje, s atribucijom izvora i opcionim URL-om
 
-To run locally, open `index.html` in a browser — it defaults to `localhost:3000` for the API.
+**Stack:** Leaflet.js karta (statički HTML), API serviran putem `cadastre-data/api`.
 
-## Database
+## Preglednik
 
-This project uses two tables in the shared PostgreSQL database. DDLs are maintained in the [cadastre-data](../cadastre-data) repo:
+Preglednik je samostalna HTML datoteka (`index.html`) koja komunicira s dijeljenim API-jem. U produkciji se servira kao statički sadržaj na `https://zagreb.lol/zgrade`, a nginx prosljeđuje `/zgrade/api/` na API server.
 
-- [`cadastre-data/db/zagreb_building.sql`](../cadastre-data/db/zagreb_building.sql) — identity mapping (internal ID to cadastre/OSM IDs)
-- [`cadastre-data/db/zagreb_building_claim.sql`](../cadastre-data/db/zagreb_building_claim.sql) — user-contributed claims (field, value, source, source_url)
+Za lokalni rad otvorite `index.html` u pregledniku — podrazumijevano koristi `localhost:3000` za API.
 
-## Scripts
+## Baza podataka
 
-| Script | Description |
-|--------|-------------|
-| `scripts/export-claims.js` | Export all user claims to `data/claims.json` |
-| `scripts/commit-claims.sh` | Export + git commit + push (daily cron via PM2) |
+Projekt koristi dvije tablice u dijeljenoj PostgreSQL bazi. DDL-ovi se održavaju u `cadastre-data` repozitoriju:
+
+- `cadastre-data/db/zagreb_building.sql` — mapiranje identiteta (interni ID na katastarski/OSM ID)
+- `cadastre-data/db/zagreb_building_claim.sql` — korisnički unosi (field, value, source, source_url)
+
+## Skripte
+
+| Skripta                    | Opis                                              |
+| -------------------------- | ------------------------------------------------- |
+| `scripts/export-claims.js` | Izvoz svih korisničkih unosa u `data/claims.json` |
+| `scripts/commit-claims.sh` | Izvoz + git commit + push (dnevni cron putem PM2) |
 
 ## API
 
-The API is served by the shared [cadastre-data/api](../cadastre-data/api) server (Hono). Building endpoints:
+API se servira putem dijeljenog `cadastre-data/api` servera (Hono). Endpointi za zgrade:
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/building-types` | Distinct cadastre building type codes |
-| `GET /api/buildings?bbox=W,S,E,N` | Buildings in viewport as GeoJSON |
-| `GET /api/buildings/heatmap?bbox=W,S,E,N` | Centroids + job counts for heatmap |
-| `GET /api/building/:cadastre_id` | Merged detail from all sources |
-| `POST /api/claims` | Submit a user claim (rate limited) |
+| Endpoint                                  | Opis                                                 |
+| ----------------------------------------- | ---------------------------------------------------- |
+| `GET /api/building-types`                 | Jedinstveni katastarski kodovi vrsta zgrada          |
+| `GET /api/buildings?bbox=W,S,E,N`         | Zgrade u vidljivom području kao GeoJSON              |
+| `GET /api/buildings/heatmap?bbox=W,S,E,N` | Centroidi + broj radnih mjesta za toplinski prikaz   |
+| `GET /api/building/:cadastre_id`          | Spojeni detalji iz svih izvora                       |
+| `POST /api/claims`                        | Unos korisničkog podatka (ograničen brojem zahtjeva) |
 
-## Deployment
+## Deploy
 
 ```sh
 ./deploy-to-server.sh
 ```
 
-Deploys the frontend to `/var/www/zagreb.lol/zgrade` and sets up the PM2 export cron. The API is deployed separately via the cadastre-data repo.
+Postavlja frontend na `/var/www/zagreb.lol/zgrade` i konfigurira PM2 cron za izvoz. API se postavlja zasebno putem cadastre-data repozitorija.

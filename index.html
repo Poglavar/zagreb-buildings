@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="hr">
 
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Zagreb Buildings</title>
+    <title>Zgrade Zagreba</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -24,6 +24,8 @@
         }
         header button:hover { background: #f0f0f0; }
         header button:disabled { opacity: 0.5; cursor: not-allowed; }
+        header button.secondary { background: #e9ecef; border-color: #ced4da; }
+        header button.secondary:hover { background: #dee2e6; }
         header button.primary { background: #228be6; color: #fff; border-color: #228be6; }
         header button.primary:hover { background: #1c7ed6; }
 
@@ -69,22 +71,29 @@
             padding: 12px 16px; border-bottom: 1px solid #e9ecef;
             background: #f8f9fa; border-radius: 8px 8px 0 0;
         }
-        .bld-popup-header h3 { margin: 0 0 4px; font-size: 14px; line-height: 1.3; }
+        .bld-popup-header h3 { margin: 0 0 4px; font-size: 14px; line-height: 1.3; display: flex; align-items: center; gap: 6px; }
         .bld-popup-header .ids { font-size: 11px; color: #868e96; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
-        .id-toggle {
-            display: inline-block; padding: 1px 8px; border-radius: 3px;
-            font-size: 11px; font-weight: 500; cursor: pointer;
-            border: 1.5px solid transparent; user-select: none; transition: all 0.15s;
+        .outline-toggle {
+            display: inline-flex; align-items: center; gap: 3px;
+            font-size: 11px; cursor: pointer; user-select: none;
         }
-        .id-toggle.cadastre { background: #d0ebff; color: #1864ab; border-color: #74c0fc; cursor: default; }
-        .id-toggle.osm { background: #fff; color: #2b8a3e; border: 1.5px solid #dee2e6; }
-        .id-toggle.osm:hover { border-color: #69db7c; }
-        .id-toggle.osm.active { background: #d3f9d8; border-color: #69db7c; }
+        .outline-toggle input { margin: 0; cursor: pointer; accent-color: #228be6; }
+        .outline-toggle input:disabled { cursor: default; }
+        .outline-label { font-weight: 500; }
+        .outline-label.cadastre { color: #1864ab; }
+        .outline-label.osm { color: #2b8a3e; }
         .street-view-link {
-            margin-left: auto; font-size: 11px; color: #868e96;
-            text-decoration: none; display: inline-flex; align-items: center; gap: 3px;
+            font-size: 11px; color: #868e96; font-weight: 400;
+            text-decoration: none; white-space: nowrap;
         }
         .street-view-link:hover { color: #228be6; }
+        .share-link {
+            font-size: 11px; color: #868e96; font-weight: 400;
+            text-decoration: none; cursor: pointer; white-space: nowrap;
+            background: none; border: none; padding: 0; font-family: inherit;
+            display: inline-flex; align-items: center;
+        }
+        .share-link:hover { color: #228be6; }
 
         .bld-popup-body {
             padding: 10px 16px;
@@ -131,19 +140,32 @@
         .url-link { color: #228be6; text-decoration: none; font-size: 11px; margin-left: 4px; }
         .url-link:hover { text-decoration: underline; }
 
+        .osm-spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid #dee2e6; border-top-color: #2b8a3e; border-radius: 50%; animation: spin 0.6s linear infinite; margin-left: 4px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .osm-status { font-size: 11px; margin-left: 4px; display: inline-flex; align-items: center; gap: 4px; }
+        .osm-error { color: #e03131; }
+        .osm-retry { cursor: pointer; color: #868e96; background: none; border: none; padding: 0; font-size: 13px; line-height: 1; }
+        .osm-retry:hover { color: #228be6; }
+
         .bld-popup-footer {
             padding: 10px 16px; border-top: 1px solid #e9ecef;
             background: #f8f9fa; border-radius: 0 0 8px 8px;
         }
         .add-claim label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 3px; color: #495057; }
         .add-claim .row { display: flex; gap: 6px; margin-bottom: 6px; }
-        .add-claim .row > * { flex: 1; }
+        .add-claim .row > * { flex: 1 1 50%; min-width: 0; box-sizing: border-box; }
         .add-claim select, .add-claim input {
-            width: 100%; padding: 5px 6px; font-size: 12px;
+            padding: 5px 6px; font-size: 12px;
             border: 1px solid #ccc; border-radius: 3px;
             height: 28px; box-sizing: border-box;
+            -webkit-appearance: none; appearance: none;
+            width: 100%;
         }
-        .add-claim .actions { display: flex; gap: 6px; }
+        .add-claim select {
+            background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23666'/%3E%3C/svg%3E") no-repeat right 6px center;
+            padding-right: 20px;
+        }
+        .add-claim .actions { display: flex; gap: 6px; justify-content: center; }
         .add-claim .actions button {
             padding: 4px 12px; font-size: 12px; cursor: pointer;
             border: 1px solid #ccc; border-radius: 3px;
@@ -191,28 +213,63 @@
 <body>
     <div class="app">
         <header>
-            <h1>Zagreb Buildings</h1>
-            <button id="loadJobsBtn" class="primary">Load Buildings with Jobs</button>
-            <button id="loadAllBtn" title="Zoom in to level 17+ to enable">Load All Buildings</button>
+            <a href="https://zagreb.lol" target="_blank" rel="noopener" title="zagreb.lol" style="display:flex;align-items:center;flex-shrink:0;">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="28" height="28">
+                    <defs>
+                        <linearGradient id="logoSunGrad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#FFD700"/><stop offset="100%" stop-color="#FF8C00"/></linearGradient>
+                        <style>.logo-ray{fill:#FFA100}</style>
+                    </defs>
+                    <rect width="1000" height="1000" fill="#F8FAFC" rx="120"/>
+                    <g transform="translate(500,420)">
+                        <g><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray"/><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray" transform="rotate(30)"/><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray" transform="rotate(60)"/><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray" transform="rotate(90)"/><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray" transform="rotate(120)"/><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray" transform="rotate(150)"/><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray" transform="rotate(180)"/><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray" transform="rotate(210)"/><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray" transform="rotate(240)"/><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray" transform="rotate(270)"/><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray" transform="rotate(300)"/><path d="M-25,-230 L0,-320 L25,-230 Z" class="logo-ray" transform="rotate(330)"/></g>
+                        <circle cx="0" cy="0" r="200" fill="url(#logoSunGrad)" stroke="#FFF" stroke-width="12"/>
+                        <path d="M-60 -20 Q-40 -50 -20 -20" fill="none" stroke="#1E293B" stroke-width="14" stroke-linecap="round"/>
+                        <path d="M20 -20 Q40 -50 60 -20" fill="none" stroke="#1E293B" stroke-width="14" stroke-linecap="round"/>
+                        <circle cx="-90" cy="30" r="20" fill="#EA580C" opacity="0.6"/><circle cx="90" cy="30" r="20" fill="#EA580C" opacity="0.6"/>
+                        <path d="M-50 40 Q0 110 50 40" fill="none" stroke="#1E293B" stroke-width="14" stroke-linecap="round"/>
+                    </g>
+                </svg>
+            </a>
+            <h1>Zgrade Zagreba</h1>
+            <button id="loadJobsBtn" class="primary">Zgrade s radnim mjestima</button>
+            <button id="loadAllBtn" class="secondary" title="Zumirajte na razinu 17+ za aktivaciju">Sve zgrade</button>
             <div class="stats-bar" id="statsBar"></div>
             <div class="legend">
                 <div class="legend-item"><div class="legend-swatch" style="background:#2b8a3e"></div> 1-10</div>
                 <div class="legend-item"><div class="legend-swatch" style="background:#f59f00"></div> 10-50</div>
                 <div class="legend-item"><div class="legend-swatch" style="background:#e8590c"></div> 50-200</div>
                 <div class="legend-item"><div class="legend-swatch" style="background:#c92a2a"></div> 200+</div>
-                <div class="legend-item"><div class="legend-swatch" style="background:#7048e8"></div> User data</div>
-                <div class="legend-item"><div class="legend-swatch" style="background:#bbb"></div> No jobs</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:transparent;border:2px dashed #000"></div> Korisnički unos</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:#bbb"></div> Bez radnih mjesta</div>
             </div>
-            <button onclick="document.getElementById('classModal').classList.add('open')">Classification</button>
+            <button onclick="document.getElementById('classModal').classList.add('open')">Klasifikacija</button>
+            <a href="https://github.com/Poglavar/zagreb-buildings" target="_blank" rel="noopener" title="Pogledaj na GitHubu" style="display:flex;margin-left:4px;color:#333;">
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            </a>
         </header>
         <div id="map"></div>
-        <div class="status"><span id="status">Pan/zoom to area of interest. "Load Buildings with Jobs" for overview, or zoom to 17+ and "Load All Buildings" to edit.</span><span id="zoom-level" style="float:right;color:#888"></span></div>
+        <div class="status"><span id="status">Pomjerite kartu na područje interesa. "Zgrade s radnim mjestima" za pregled, ili zumirajte na 17+ i "Sve zgrade" za uređivanje.</span><span id="zoom-level" style="float:right;color:#888"></span></div>
+    </div>
+
+    <div class="modal-overlay" id="fieldHelpModal" onclick="if(event.target===this)this.classList.remove('open')">
+        <div class="modal" style="max-width:480px;">
+            <div class="modal-header">
+                <h2>Tipovi podataka</h2>
+                <button onclick="document.getElementById('fieldHelpModal').classList.remove('open')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="line-height:1.6;">
+                    Ovo je otvorena baza i u idealnom slučaju mogli bi se unositi proizvoljni podaci, međutim, inicijalni skup je ograničen na podatke relevantne za ekonomske analize.
+                    Ako smatrate da ima smisla dodati neki tip podatka, napravite Issue ili PR na <a href="https://github.com/Poglavar/zagreb-buildings" target="_blank" rel="noopener">GitHub repozitoriju</a>.
+                </p>
+            </div>
+        </div>
     </div>
 
     <div class="modal-overlay" id="classModal" onclick="if(event.target===this)this.classList.remove('open')">
         <div class="modal">
             <div class="modal-header">
-                <h2>Building classification &amp; job estimation</h2>
+                <h2>Klasifikacija zgrada i procjena radnih mjesta</h2>
                 <button onclick="document.getElementById('classModal').classList.remove('open')">&times;</button>
             </div>
             <div class="modal-body" id="classModalBody"></div>
@@ -235,6 +292,114 @@
             const hostname = window.location.hostname || 'localhost';
             return `${protocol}//${hostname}:3000`;
         })();
+
+        // ─── OSM fetch (direct from Overpass API) ────────────────────────────
+        function computeAreaM2(nodes) {
+            if (!nodes || nodes.length < 3) return null;
+            let area = 0;
+            const n = nodes.length;
+            for (let i = 0; i < n; i++) {
+                const j = (i + 1) % n;
+                area += nodes[i].lon * nodes[j].lat;
+                area -= nodes[j].lon * nodes[i].lat;
+            }
+            area = Math.abs(area) / 2;
+            const avgLat = nodes.reduce((s, p) => s + p.lat, 0) / n;
+            const mPerDegLat = 111320;
+            const mPerDegLon = 111320 * Math.cos(avgLat * Math.PI / 180);
+            return Math.round(area * mPerDegLat * mPerDegLon * 10) / 10;
+        }
+
+        function extractGeomNodes(el) {
+            if (el.type === 'way' && el.geometry) return el.geometry;
+            if (el.type === 'relation' && el.members) {
+                const outerNodes = [];
+                for (const m of el.members) {
+                    if (m.role === 'outer' && m.geometry) outerNodes.push(...m.geometry);
+                }
+                return outerNodes.length >= 3 ? outerNodes : null;
+            }
+            return null;
+        }
+
+        async function fetchOsmBuilding(lat, lon) {
+            try {
+                const q = `[out:json][timeout:8];
+                    is_in(${lat},${lon})->.a;
+                    (way(pivot.a)[building];rel(pivot.a)[building];);
+                    out geom;`;
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 10000);
+                const resp = await fetch('https://overpass-api.de/api/interpreter', {
+                    method: 'POST',
+                    body: 'data=' + encodeURIComponent(q),
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    signal: controller.signal,
+                });
+                clearTimeout(timeout);
+                if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+                const data = await resp.json();
+                if (!data.elements || data.elements.length === 0) return null;
+
+                const el = data.elements.find(e => e.type === 'relation') || data.elements[0];
+                const tags = el.tags || {};
+                const geomNodes = extractGeomNodes(el);
+                const area = geomNodes ? computeAreaM2(geomNodes) : null;
+                let polygon = null;
+                if (geomNodes && geomNodes.length >= 3) {
+                    const coords = geomNodes.map(n => [n.lon, n.lat]);
+                    if (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1]) {
+                        coords.push(coords[0]);
+                    }
+                    polygon = coords;
+                }
+                return {
+                    osm_id: (el.type === 'way' ? 'w' : 'r') + el.id,
+                    height: tags.height ? parseFloat(tags.height) : null,
+                    levels: tags['building:levels'] ? parseInt(tags['building:levels'], 10) : null,
+                    name: tags.name || null,
+                    building_type: tags.building || null,
+                    area_m2: area,
+                    polygon,
+                };
+            } catch (e) {
+                if (e.name === 'AbortError') return null; // timeout — silent
+                throw e; // propagate to caller
+            }
+        }
+
+        function mergeOsmIntoDetail(detail, osmData) {
+            if (!osmData || detail._osmMerged) return;
+            detail._osmMerged = true;
+            detail.osm_id = osmData.osm_id;
+            detail.osm_name = osmData.name;
+            detail.osm_building_type = osmData.building_type;
+            detail.osm_polygon = osmData.polygon;
+            const claims = detail.claims || {};
+            // Add OSM ID
+            if (osmData.osm_id) {
+                if (!claims.id) claims.id = [];
+                const osmType = osmData.osm_id[0] === 'w' ? 'way' : 'relation';
+                const osmNumeric = osmData.osm_id.slice(1);
+                claims.id.push({ value: 0, source: 'osm', text: osmData.osm_id, url: `https://www.openstreetmap.org/${osmType}/${osmNumeric}` });
+            }
+            if (osmData.height != null) {
+                if (!claims.height_m) claims.height_m = [];
+                claims.height_m.push({ value: osmData.height, source: 'osm' });
+            }
+            if (osmData.levels != null) {
+                if (!claims.floors) claims.floors = [];
+                claims.floors.push({ value: osmData.levels, source: 'osm' });
+            }
+            if (osmData.area_m2 != null) {
+                if (!claims.area_m2) claims.area_m2 = [];
+                claims.area_m2.push({ value: osmData.area_m2, source: 'osm', derived: true });
+            }
+            // Update sources list
+            if (!detail.sources) detail.sources = [];
+            if (!detail.sources.includes('osm')) detail.sources.push('osm');
+            detail.sources.sort();
+        }
 
         // Classification reference data (mirrors server.js classifyBuilding + estimateJobs)
         const CLASSIFICATIONS = [
@@ -277,15 +442,15 @@
         (function renderClassModal() {
             const body = document.getElementById('classModalBody');
             let html = `<p>
-                Jobs are estimated as: <strong>footprint × (floors × commercial ratio) / density</strong>.<br>
-                Density = gross m² per worker. Sources: BCO Guide to Specification (offices ~25-30 m²/worker),
-                RICS valuation guidance (retail ~20-35), US GSA space standards, ILO/UNWTO (hospitality ~25-35).
-                These are rough international benchmarks — actual values vary by building.
+                Radna mjesta se procjenjuju kao: <strong>tlocrt × (katovi × komercijalni udio) / gustoća</strong>.<br>
+                Gustoća = bruto m² po radniku. Izvori: BCO Guide to Specification (uredi ~25-30 m²/radnik),
+                RICS smjernice (trgovine ~20-35), US GSA standardi, ILO/UNWTO (ugostiteljstvo ~25-35).
+                Ovo su okvirne međunarodne procjene — stvarne vrijednosti variraju po zgradi.
             </p>`;
             html += `<table class="cls-table">
                 <thead><tr>
-                    <th>Code</th><th>Type</th><th>Category</th>
-                    <th>Commercial ratio</th><th>Density (m²/job)</th><th>Note</th>
+                    <th>Šifra</th><th>Vrsta</th><th>Kategorija</th>
+                    <th>Komercijalni udio</th><th>Gustoća (m²/radno mjesto)</th><th>Napomena</th>
                 </tr></thead><tbody>`;
             for (const c of CLASSIFICATIONS) {
                 const isNone = c.category === 'none';
@@ -300,8 +465,8 @@
             }
             html += `</tbody></table>`;
             html += `<p style="margin-top:10px">
-                All other type codes (residential, auxiliary, ruins, etc.) are classified as <strong>none</strong> — no jobs estimated.
-                Floor count defaults by category if no height data: office 4, mixed 5, industrial 1, logistics 1, hospitality 4, education 2, health 4, admin 3, retail 1.
+                Sve ostale šifre (stambene, pomoćne, ruševine itd.) klasificirane su kao <strong>none</strong> — bez procjene radnih mjesta.
+                Zadani broj katova po kategoriji ako nema podataka o visini: ured 4, mješovito 5, industrija 1, logistika 1, ugostiteljstvo 4, obrazovanje 2, zdravstvo 4, uprava 3, trgovina 1.
             </p>`;
             body.innerHTML = html;
         })();
@@ -309,9 +474,9 @@
         const DISPLAY_FIELDS = ['id', 'area_m2', 'height_m', 'floors', 'jobs', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'building_type_desc'];
         const KNOWN_FIELDS = ['area_m2', 'height_m', 'floors', 'jobs', 'pupils', 'visitors', 'rent_eur_m2', 'building_type'];
         const FIELD_LABELS = {
-            id: 'ID', area_m2: 'Area (m\u00B2)', height_m: 'Height (m)', floors: 'Floors',
-            jobs: 'Jobs', pupils: 'Pupils', visitors: 'Visitors', rent_eur_m2: 'Rent (\u20AC/m\u00B2)',
-            building_type: 'Type code', building_type_desc: 'Type description',
+            id: 'ID', area_m2: 'Površina (m\u00B2)', height_m: 'Visina (m)', floors: 'Katovi',
+            jobs: 'Radna mjesta', pupils: 'Učenici', visitors: 'Posjetitelji', rent_eur_m2: 'Najam (\u20AC/m\u00B2)',
+            building_type: 'Šifra vrste', building_type_desc: 'Opis vrste',
         };
         const SYSTEM_SOURCES = new Set(['cadastre', '3d_survey', 'auto_estimate', 'osm']);
 
@@ -369,7 +534,7 @@
             zoomEl.textContent = 'z' + z.toFixed(1);
             const canLoadAll = z >= MIN_ZOOM_ALL;
             loadAllBtn.disabled = !canLoadAll;
-            loadAllBtn.title = canLoadAll ? '' : `Zoom in to level ${MIN_ZOOM_ALL}+ to enable`;
+            loadAllBtn.title = canLoadAll ? '' : `Zumirajte na razinu ${MIN_ZOOM_ALL}+ za aktivaciju`;
         }
         map.on('zoomend', updateZoomUI);
         updateZoomUI();
@@ -428,12 +593,14 @@
         function buildingStyle(feature) {
             const p = feature.properties || {};
             const jobs = p.effective_jobs || 0;
-            if (p.has_user_data) {
-                return { color: '#7048e8', weight: 2.5, fillColor: '#7048e8', fillOpacity: 0.35 };
-            }
             if (jobs > 0) {
                 const c = jobsColor(jobs);
-                return { color: c, weight: 1, fillColor: c, fillOpacity: 0.45 };
+                const style = { color: c, weight: 1, fillColor: c, fillOpacity: 0.45 };
+                if (p.has_user_data) { style.color = '#000'; style.dashArray = '5,4'; style.weight = 2; }
+                return style;
+            }
+            if (p.has_user_data) {
+                return { color: '#000', weight: 2, fillColor: '#bbb', fillOpacity: 0.12, dashArray: '5,4' };
             }
             return { color: '#888', weight: 0.5, fillColor: '#bbb', fillOpacity: 0.12 };
         }
@@ -447,10 +614,10 @@
                 if (p.has_user_data) userCount++;
             }
             statsBar.innerHTML = `
-                <span><strong>${features.length.toLocaleString()}</strong> buildings</span>
-                <span><strong>${withJobs.toLocaleString()}</strong> with jobs</span>
-                <span><strong>${totalJobs.toLocaleString()}</strong> total jobs</span>
-                ${userCount ? `<span><strong>${userCount}</strong> with user data</span>` : ''}
+                <span><strong>${features.length.toLocaleString()}</strong> zgrada</span>
+                <span><strong>${withJobs.toLocaleString()}</strong> s radnim mjestima</span>
+                <span><strong>${totalJobs.toLocaleString()}</strong> ukupno radnih mjesta</span>
+                ${userCount ? `<span><strong>${userCount}</strong> s korisničkim podacima</span>` : ''}
             `;
         }
 
@@ -465,6 +632,7 @@
 
         // ─── Detail cache for current popup ──────────────────────────────────
         let currentDetail = null;
+        let osmLoadState = null; // null | 'loading' | 'done' | 'error:message'
         let osmOverlayLayer = null;
         let osmOverlayVisible = false;
 
@@ -476,7 +644,7 @@
             const cadastreId = d.cadastre_building_id;
 
             // Filter dropdown
-            const filterOptions = ['<option value="">All sources</option>'];
+            const filterOptions = ['<option value="">Svi izvori</option>'];
             for (const s of sources) {
                 const sel = sourceFilter === s ? ' selected' : '';
                 filterOptions.push(`<option value="${escapeHtml(s)}"${sel}>${escapeHtml(s)}</option>`);
@@ -502,7 +670,7 @@
                     } else {
                         displayValue = Math.round(c.value);
                     }
-                    const derivedTooltip = c.derived_tooltip || 'Derived value';
+                    const derivedTooltip = c.derived_tooltip || 'Izvedena vrijednost';
                     const derivedHtml = c.derived ? `<span class="derived-tag" title="${escapeHtml(derivedTooltip)}">derived</span>` : '';
                     claimsHtml += `<tr>
                         <td class="field-name">${FIELD_LABELS[field]}</td>
@@ -513,51 +681,51 @@
             }
             if (!claimsHtml) {
                 claimsHtml = `<tr><td colspan="3" style="color:#adb5bd; padding:12px 8px;">
-                    ${sourceFilter ? 'No data from this source' : 'No data yet'}
+                    ${sourceFilter ? 'Nema podataka iz ovog izvora' : 'Još nema podataka'}
                 </td></tr>`;
             }
 
             return `
                 <div class="bld-popup">
                     <div class="bld-popup-header">
-                        <h3>${d.osm_name ? escapeHtml(d.osm_name) : escapeHtml(d.cadastre_building_type_name || 'Unknown type')}</h3>
+                        <h3>${d.osm_name ? escapeHtml(d.osm_name) : escapeHtml(d.cadastre_building_type_name || 'Nepoznata vrsta')}${d.lat && d.lon ? ` <a class="street-view-link" href="https://www.google.com/maps?cbll=${d.lat},${d.lon}&cbp=12,0,0,0,0&layer=c" target="_blank" rel="noopener">Street View ↗</a>` : ''} <button class="share-link" onclick="window.shareBuilding(${cadastreId})" title="Kopiraj link"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button></h3>
                         <div class="ids">
-                            <span class="id-toggle cadastre active">cadastre</span>
-                            ${d.osm_polygon ? `<span class="id-toggle osm" onclick="window.toggleOsmPolygon()">osm</span>` : ''}
-                            ${d.lat && d.lon ? `<a class="street-view-link" href="https://www.google.com/maps?cbll=${d.lat},${d.lon}&cbp=12,0,0,0,0&layer=c" target="_blank" rel="noopener">Street View ↗</a>` : ''}
+                            <span style="color:#868e96;font-size:11px;">Tlocrt:</span>
+                            <label class="outline-toggle"><input type="checkbox" checked disabled><span class="outline-label cadastre">katastar</span></label>
+                            ${d.osm_polygon ? `<label class="outline-toggle"><input type="checkbox" onchange="window.toggleOsmPolygon()"><span class="outline-label osm">OSM</span></label>` : ''}${osmLoadState === 'loading' ? '<span class="osm-status"><span class="osm-spinner"></span></span>' : osmLoadState === 'nodata' ? '<span class="osm-status" style="color:#2b8a3e">OSM nema zgradu na točki klika</span>' : osmLoadState && osmLoadState.startsWith('error:') ? `<span class="osm-status"><button class="osm-retry" onclick="window.retryOsm(event)" title="Pokušaj ponovo">🔄</button> OSM podaci nisu dohvaćeni <span class="osm-error">(${escapeHtml(osmLoadState.slice(6))})</span></span>` : ''}
                         </div>
                     </div>
                     <div class="bld-popup-body">
                         <div class="source-filter">
-                            <label>Source:</label>
+                            <label>Izvor:</label>
                             <select onchange="filterSource(this.value)">
                                 ${filterOptions.join('')}
                             </select>
                         </div>
                         <table class="claims-table">
-                            <thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead>
+                            <thead><tr><th>Polje</th><th>Vrijednost</th><th>Izvor</th></tr></thead>
                             <tbody>${claimsHtml}</tbody>
                         </table>
                     </div>
                     <div class="bld-popup-footer">
                         <div class="add-claim">
-                            <label>Add a data point</label>
+                            <label style="display:flex;align-items:baseline;gap:6px;">Dodaj podatak <a href="#" onclick="event.preventDefault();document.getElementById('fieldHelpModal').classList.add('open')" style="font-size:11px;font-weight:400;color:#868e96;">Tip nije ponuđen?</a></label>
                             <div class="row">
                                 <select id="claimField" onchange="window.onClaimFieldChange()">
                                     ${KNOWN_FIELDS.map(f => `<option value="${f}">${FIELD_LABELS[f]}</option>`).join('')}
                                 </select>
-                                <span id="claimValueWrap">
-                                    <input type="number" id="claimValue" placeholder="Value" step="any" style="width:100%">
-                                </span>
+                                <div id="claimValueWrap">
+                                    <input type="number" id="claimValue" placeholder="Vrijednost" step="any" min="0">
+                                </div>
                             </div>
                             <div class="row">
-                                <input type="url" id="claimUrl" placeholder="Supporting URL (optional)">
-                                <input type="text" id="claimSource" placeholder="Your name / source" maxlength="100"
+                                <input type="url" id="claimUrl" placeholder="URL izvora (opcionalno)">
+                                <input type="text" id="claimSource" placeholder="Vaše ime / izvor" maxlength="100"
                                     value="${escapeHtml(localStorage.getItem('claimSource') || '')}"
                                     onchange="localStorage.setItem('claimSource', this.value)">
                             </div>
                             <div class="actions">
-                                <button class="btn-save" onclick="saveClaim(${cadastreId})">Save</button>
+                                <button class="btn-save" onclick="saveClaim(${cadastreId})">Spremi</button>
                             </div>
                             <div class="msg" id="claimMsg"></div>
                         </div>
@@ -581,6 +749,23 @@
             updateOpenPopup(buildPopupHtml(currentDetail, source || null));
         };
 
+        window.shareBuilding = function (cadastreId) {
+            const basePath = window.location.pathname.startsWith('/zgrade') ? '/zgrade' : '';
+            const url = `${window.location.origin}${basePath}/${cadastreId}`;
+            navigator.clipboard.writeText(url).then(() => {
+                // Brief visual feedback on the button
+                const btn = document.querySelector('.share-link');
+                if (btn) {
+                    const orig = btn.innerHTML;
+                    btn.innerHTML = '<span style="font-size:11px">Kopirano!</span>';
+                    setTimeout(() => { btn.innerHTML = orig; }, 1500);
+                }
+            }).catch(() => {
+                // Fallback: select text in a prompt
+                window.prompt('Link na zgradu:', url);
+            });
+        };
+
         function removeOsmOverlay() {
             if (osmOverlayLayer) {
                 map.removeLayer(osmOverlayLayer);
@@ -594,7 +779,6 @@
             if (osmOverlayVisible) {
                 removeOsmOverlay();
             } else {
-                // Draw OSM polygon as a green overlay
                 const latlngs = currentDetail.osm_polygon.map(c => [c[1], c[0]]);
                 osmOverlayLayer = L.polygon(latlngs, {
                     color: '#2b8a3e',
@@ -607,9 +791,37 @@
                 osmOverlayLayer.addTo(map);
                 osmOverlayVisible = true;
             }
-            // Update toggle button state
-            const btn = document.querySelector('.id-toggle.osm');
-            if (btn) btn.classList.toggle('active', osmOverlayVisible);
+        };
+
+        async function loadOsmForPopup(cadastreId, popup) {
+            try {
+                const osmData = await fetchOsmBuilding(currentDetail.lat, currentDetail.lon);
+                if (!popup._map || currentDetail?.cadastre_building_id !== cadastreId) return;
+                if (osmData) {
+                    mergeOsmIntoDetail(currentDetail, osmData);
+                    osmLoadState = 'done';
+                } else {
+                    osmLoadState = 'nodata';
+                }
+                updateOpenPopup(buildPopupHtml(currentDetail, null));
+            } catch (e) {
+                if (!popup._map || currentDetail?.cadastre_building_id !== cadastreId) return;
+                osmLoadState = 'error:' + (e.message || 'nepoznata greška');
+                updateOpenPopup(buildPopupHtml(currentDetail, null));
+            }
+        }
+
+        window.retryOsm = function (event) {
+            if (event) { event.stopPropagation(); event.preventDefault(); }
+            if (!currentDetail || !currentDetail.lat) return;
+            currentDetail._osmMerged = false;
+            osmLoadState = 'loading';
+            // Find the open popup first, before updating content
+            let popup = null;
+            map.eachLayer(l => { if (l instanceof RightPopup && l._map) popup = l; });
+            if (!popup) return;
+            popup.setContent(buildPopupHtml(currentDetail, null));
+            loadOsmForPopup(currentDetail.cadastre_building_id, popup);
         };
 
         window.onClaimFieldChange = function () {
@@ -621,9 +833,9 @@
                 const opts = BUILDING_TYPES.map(t =>
                     `<option value="${escapeHtml(t.code)}">${escapeHtml(t.code)} – ${escapeHtml(t.name)}</option>`
                 ).join('');
-                wrap.innerHTML = `<select id="claimValue" style="width:100%">${opts}</select>`;
+                wrap.innerHTML = `<select id="claimValue">${opts}</select>`;
             } else {
-                wrap.innerHTML = `<input type="number" id="claimValue" placeholder="Value" step="any" style="width:100%">`;
+                wrap.innerHTML = `<input type="number" id="claimValue" placeholder="Vrijednost" step="any">`;
             }
         };
 
@@ -653,12 +865,20 @@
 
         async function onBuildingClick(feature, layer) {
             // Only allow popups/editing at high zoom
-            if (currentMode !== 'all') return;
+            if (currentMode === 'heatmap' || !currentMode) return;
 
-            // Clean up previous OSM overlay
+            // Clean up previous state
             removeOsmOverlay();
+            osmLoadState = null;
 
             const cadastreId = feature.properties.cadastre_building_id;
+
+            // Update URL to reflect selected building (skip if already on this URL)
+            const basePath = window.location.pathname.startsWith('/zgrade') ? '/zgrade' : '';
+            const targetPath = `${basePath}/${cadastreId}`;
+            if (window.location.pathname !== targetPath) {
+                history.pushState({ cadastreId }, '', `${targetPath}${window.location.search}`);
+            }
 
             // Position: put the building in the left ~1/3 of the map
             // so the popup has room to open to the right
@@ -687,28 +907,37 @@
             popup.options.offset = [halfWidth + 15, 0];
 
             // Show loading state, open at building center
-            popup.setContent('Loading...');
+            popup.setContent('Učitavanje...');
             popup.setLatLng(center);
             popup.openOn(map);
 
-            // When popup closes, clean up OSM overlay
-            popup.once('remove', () => removeOsmOverlay());
+            // When popup closes, clean up OSM overlay and reset URL
+            popup.once('remove', () => {
+                removeOsmOverlay();
+                const basePath = window.location.pathname.startsWith('/zgrade') ? '/zgrade' : '/';
+                history.pushState({}, '', `${basePath}${window.location.search}`);
+            });
 
             try {
                 const res = await fetch(`${API_BASE}/api/building/${cadastreId}`);
                 if (!res.ok) throw new Error('Not found');
                 currentDetail = await res.json();
+                osmLoadState = 'loading';
                 popup.setContent(buildPopupHtml(currentDetail, null));
 
-                // Re-pan after content is set (popup height may have changed)
                 setTimeout(() => {
                     if (!popup._map) return;
                     popup._updatePosition();
                     ensurePopupVisible(popup);
                 }, 50);
+
+                // Fetch OSM data in background and enrich popup
+                if (currentDetail.lat && currentDetail.lon) {
+                    loadOsmForPopup(cadastreId, popup);
+                }
             } catch (e) {
                 currentDetail = null;
-                popup.setContent('<div style="padding:12px; color:#868e96;">Failed to load building data.</div>');
+                popup.setContent('<div style="padding:12px; color:#868e96;">Greška pri učitavanju podataka.</div>');
             }
         }
 
@@ -719,9 +948,13 @@
             const source_url = document.getElementById('claimUrl').value.trim() || undefined;
             const msgEl = document.getElementById('claimMsg');
 
-            if (!field) { msgEl.textContent = 'Select a field'; msgEl.style.color = '#e03131'; return; }
-            if (isNaN(value)) { msgEl.textContent = 'Value must be a number'; msgEl.style.color = '#e03131'; return; }
-            if (!source) { msgEl.textContent = 'Source is required'; msgEl.style.color = '#e03131'; return; }
+            if (!field) { msgEl.textContent = 'Odaberite polje'; msgEl.style.color = '#e03131'; return; }
+            if (isNaN(value)) { msgEl.textContent = 'Vrijednost mora biti broj'; msgEl.style.color = '#e03131'; return; }
+            if (value < 0) { msgEl.textContent = 'Vrijednost ne može biti negativna'; msgEl.style.color = '#e03131'; return; }
+            const limits = { area_m2: 500000, height_m: 300, floors: 100, jobs: 50000, pupils: 10000, visitors: 100000, rent_eur_m2: 1000, building_type: 999 };
+            if (limits[field] && value > limits[field]) { msgEl.textContent = `Maksimalna vrijednost za ovo polje je ${limits[field]}`; msgEl.style.color = '#e03131'; return; }
+            if (['floors', 'jobs', 'pupils', 'visitors', 'building_type'].includes(field) && value !== Math.floor(value)) { msgEl.textContent = 'Vrijednost mora biti cijeli broj'; msgEl.style.color = '#e03131'; return; }
+            if (!source) { msgEl.textContent = 'Izvor je obavezan'; msgEl.style.color = '#e03131'; return; }
 
             try {
                 const body = { cadastre_building_id: cadastreId, field, value, source };
@@ -734,9 +967,9 @@
                 });
                 if (!res.ok) {
                     const d = await res.json();
-                    throw new Error(d.error || 'Save failed');
+                    throw new Error(d.error || 'Spremanje neuspješno');
                 }
-                msgEl.textContent = 'Saved'; msgEl.style.color = '#2b8a3e';
+                msgEl.textContent = 'Spremljeno'; msgEl.style.color = '#2b8a3e';
 
                 // Refresh popup data
                 const detailRes = await fetch(`${API_BASE}/api/building/${cadastreId}`);
@@ -750,6 +983,7 @@
                     buildingsLayer.eachLayer(l => {
                         if (l.feature?.properties?.cadastre_building_id === cadastreId) {
                             l.feature.properties.has_user_data = true;
+                            if (field === 'jobs') l.feature.properties.effective_jobs = value;
                             l.setStyle(buildingStyle(l.feature));
                         }
                     });
@@ -773,7 +1007,7 @@
         loadJobsBtn.addEventListener('click', async () => {
             const b = map.getBounds();
             const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
-            loadJobsBtn.textContent = 'Loading...';
+            loadJobsBtn.textContent = 'Učitavanje...';
             loadJobsBtn.disabled = true;
             try {
                 // Fetch heatmap data in parallel with polygon data
@@ -811,7 +1045,7 @@
                         },
                     }).addTo(map);
                     updateStats(geojson);
-                    setStatus(`Loaded ${geojson.features.length.toLocaleString()} buildings with jobs (view only).`);
+                    setStatus(`Učitano ${geojson.features.length.toLocaleString()} zgrada s radnim mjestima (samo pregled).`);
                 } else {
                     // At zoom <15: show heatmap
                     const res = await fetch(`${API_BASE}/api/buildings/heatmap?bbox=${bbox}`);
@@ -832,13 +1066,13 @@
                             1.0: '#c92a2a',
                         },
                     }).addTo(map);
-                    setStatus(`Heatmap: ${points.length.toLocaleString()} buildings with jobs. Zoom in for detail.`);
+                    setStatus(`Toplinska karta: ${points.length.toLocaleString()} zgrada s radnim mjestima. Zumirajte za detalje.`);
                 }
             } catch (e) {
                 console.error(e);
-                setStatus(`Failed to load from ${API_BASE}. Is the server running?`, true);
+                setStatus(`Greška pri učitavanju s ${API_BASE}. Je li server pokrenut?`, true);
             } finally {
-                loadJobsBtn.textContent = 'Load Buildings with Jobs';
+                loadJobsBtn.textContent = 'Zgrade s radnim mjestima';
                 loadJobsBtn.disabled = false;
             }
         });
@@ -846,12 +1080,12 @@
         // ─── Load all buildings (full detail + editing, zoom 17+ only) ───────
         loadAllBtn.addEventListener('click', async () => {
             if (map.getZoom() < MIN_ZOOM_ALL) {
-                setStatus(`Zoom in to level ${MIN_ZOOM_ALL}+ to load all buildings.`);
+                setStatus(`Zumirajte na razinu ${MIN_ZOOM_ALL}+ za učitavanje svih zgrada.`);
                 return;
             }
             const b = map.getBounds();
             const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
-            loadAllBtn.textContent = 'Loading...';
+            loadAllBtn.textContent = 'Učitavanje...';
             loadAllBtn.disabled = true;
             try {
                 const res = await fetch(`${API_BASE}/api/buildings?bbox=${bbox}`);
@@ -883,15 +1117,108 @@
                     },
                 }).addTo(map);
                 updateStats(geojson);
-                setStatus(`Loaded ${geojson.features.length.toLocaleString()} buildings. Click any building to view/edit.`);
+                setStatus(`Učitano ${geojson.features.length.toLocaleString()} zgrada. Kliknite na zgradu za pregled/uređivanje.`);
             } catch (e) {
                 console.error(e);
-                setStatus(`Failed to load from ${API_BASE}. Is the server running?`, true);
+                setStatus(`Greška pri učitavanju s ${API_BASE}. Je li server pokrenut?`, true);
             } finally {
-                loadAllBtn.textContent = 'Load All Buildings';
+                loadAllBtn.textContent = 'Sve zgrade';
                 updateZoomUI();
             }
         });
+
+        // ─── Deep linking: /zgrade/{cadastreId} ──────────────────────────────
+
+        function parseCadastreIdFromPath() {
+            const path = window.location.pathname;
+            // Match /zgrade/{id} or just /{id} for local dev
+            const m = path.match(/\/zgrade\/(\d+)$/) || path.match(/^\/(\d+)$/);
+            return m ? parseInt(m[1], 10) : null;
+        }
+
+        // Handle browser back/forward
+        window.addEventListener('popstate', () => {
+            const id = parseCadastreIdFromPath();
+            if (id) {
+                openBuildingByDeepLink(id);
+            } else {
+                map.closePopup();
+            }
+        });
+
+        // Open a building by cadastre ID (for deep links and popstate)
+        async function openBuildingByDeepLink(cadastreId) {
+            setStatus('Učitavanje zgrade...');
+            try {
+                // 1. Fetch building detail to get coordinates
+                const res = await fetch(`${API_BASE}/api/building/${cadastreId}`);
+                if (!res.ok) throw new Error('Zgrada nije pronađena');
+                const detail = await res.json();
+                if (!detail.lat || !detail.lon) throw new Error('Nema koordinata');
+
+                // 2. Fly to building location at zoom 18
+                const targetZoom = Math.max(map.getZoom(), 18);
+                map.setView([detail.lat, detail.lon], targetZoom, { animate: true });
+
+                // 3. Load all buildings in the area around this building
+                await new Promise(r => setTimeout(r, 300)); // wait for map to settle
+                const b = map.getBounds();
+                const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+                const bldRes = await fetch(`${API_BASE}/api/buildings?bbox=${bbox}`);
+                if (!bldRes.ok) throw new Error('Greška pri učitavanju zgrada');
+                const geojson = await bldRes.json();
+                clearLayers();
+                currentMode = 'all';
+                let hoveredLayer = null;
+                let targetLayer = null;
+                buildingsLayer = L.geoJSON(geojson, {
+                    style: buildingStyle,
+                    onEachFeature: (feature, layer) => {
+                        layer._bldPopup = new RightPopup({
+                            maxWidth: 500, minWidth: 460,
+                            autoPan: false, className: 'popup-right',
+                        });
+                        layer.on('click', () => onBuildingClick(feature, layer));
+                        layer.on('mouseover', () => {
+                            if (hoveredLayer && hoveredLayer !== layer) {
+                                hoveredLayer.setStyle(buildingStyle(hoveredLayer.feature));
+                            }
+                            hoveredLayer = layer;
+                            layer.setStyle({ weight: 3, fillOpacity: 0.6 });
+                            layer.bringToFront();
+                        });
+                        layer.on('mouseout', () => {
+                            if (hoveredLayer === layer) hoveredLayer = null;
+                            layer.setStyle(buildingStyle(feature));
+                        });
+                        // Find our target building
+                        if (feature.properties.cadastre_building_id === cadastreId) {
+                            targetLayer = layer;
+                        }
+                    },
+                }).addTo(map);
+                updateStats(geojson);
+
+                // 4. Programmatically click the target building
+                if (targetLayer) {
+                    onBuildingClick(targetLayer.feature, targetLayer);
+                } else {
+                    setStatus('Zgrada učitana, ali poligon nije pronađen u ovom području.');
+                }
+            } catch (e) {
+                console.error(e);
+                setStatus(e.message, true);
+            }
+        }
+
+        // On page load: check for deep link
+        (() => {
+            const id = parseCadastreIdFromPath();
+            if (id) {
+                // Small delay to ensure map is fully initialized
+                setTimeout(() => openBuildingByDeepLink(id), 200);
+            }
+        })();
     </script>
 </body>
 
