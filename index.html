@@ -286,7 +286,7 @@
             if (explicit) return explicit.replace(/\/$/, '');
             // Production: nginx proxies /zgrade/api/ to the API server
             if (window.location.pathname.startsWith('/zgrade')) {
-                return window.location.origin + '/zgrade/api';
+                return window.location.origin + '/zgrade';
             }
             const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
             const hostname = window.location.hostname || 'localhost';
