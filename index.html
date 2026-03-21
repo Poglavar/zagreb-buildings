@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zagreb Buildings</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+    <style>
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+        .app { display: flex; flex-direction: column; height: 100%; }
+
+        header {
+            padding: 8px 12px; border-bottom: 1px solid #ddd; background: #fafafa;
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+        }
+        header h1 { margin: 0; font-size: 15px; font-weight: 700; }
+        header button {
+            padding: 5px 12px; font-size: 13px; cursor: pointer;
+            border: 1px solid #ccc; border-radius: 4px; background: #fff;
+        }
+        header button:hover { background: #f0f0f0; }
+        header button:disabled { opacity: 0.5; cursor: not-allowed; }
+        header button.primary { background: #228be6; color: #fff; border-color: #228be6; }
+        header button.primary:hover { background: #1c7ed6; }
+
+        .legend { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #555; margin-left: auto; }
+        .legend-item { display: flex; align-items: center; gap: 3px; }
+        .legend-swatch { width: 14px; height: 14px; border-radius: 2px; border: 1px solid rgba(0,0,0,0.15); }
+
+        #map { flex: 1; }
+
+        .status {
+            padding: 5px 12px; border-top: 1px solid #eee; background: #fafafa;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 12px; color: #333;
+        }
+        .status.err { color: #c92a2a; }
+
+        /* ─── Popup (opens to the right of the building) ────── */
+        .leaflet-popup-pane { z-index: 2000 !important; }
+        .leaflet-popup { z-index: 2000 !important; }
+        .leaflet-popup-content-wrapper { border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+        .leaflet-popup-content { margin: 0; width: 460px !important; }
+
+        /* Tip points left toward the building */
+        .popup-right .leaflet-popup-tip-container {
+            position: absolute;
+            left: 1px; top: 50%;
+            width: 16px; height: 16px;
+            margin: -8px 0 0 -8px;
+            overflow: hidden;
+        }
+        .popup-right .leaflet-popup-tip {
+            width: 12px; height: 12px;
+            margin: 2px 0 0 4px;
+            transform: rotate(45deg);
+            background: #fff;
+            box-shadow: -2px 2px 4px rgba(0,0,0,0.1);
+        }
+        /* Leaflet default close button — adjust for our layout */
+        .popup-right .leaflet-popup-close-button { z-index: 10; }
+
+        .bld-popup { font-size: 13px; }
+        .bld-popup-header {
+            padding: 12px 16px; border-bottom: 1px solid #e9ecef;
+            background: #f8f9fa; border-radius: 8px 8px 0 0;
+        }
+        .bld-popup-header h3 { margin: 0 0 4px; font-size: 14px; line-height: 1.3; }
+        .bld-popup-header .ids { font-size: 11px; color: #868e96; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
+        .id-toggle {
+            display: inline-block; padding: 1px 8px; border-radius: 3px;
+            font-size: 11px; font-weight: 500; cursor: pointer;
+            border: 1.5px solid transparent; user-select: none; transition: all 0.15s;
+        }
+        .id-toggle.cadastre { background: #d0ebff; color: #1864ab; border-color: #74c0fc; cursor: default; }
+        .id-toggle.osm { background: #fff; color: #2b8a3e; border: 1.5px solid #dee2e6; }
+        .id-toggle.osm:hover { border-color: #69db7c; }
+        .id-toggle.osm.active { background: #d3f9d8; border-color: #69db7c; }
+        .street-view-link {
+            margin-left: auto; font-size: 11px; color: #868e96;
+            text-decoration: none; display: inline-flex; align-items: center; gap: 3px;
+        }
+        .street-view-link:hover { color: #228be6; }
+
+        .bld-popup-body {
+            padding: 10px 16px;
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
+        .source-filter {
+            display: flex; align-items: center; gap: 6px;
+            margin-bottom: 8px; font-size: 12px;
+        }
+        .source-filter label { font-weight: 600; color: #495057; white-space: nowrap; }
+        .source-filter select {
+            flex: 1; padding: 3px 6px; font-size: 12px;
+            border: 1px solid #ccc; border-radius: 3px;
+        }
+
+        .claims-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .claims-table th {
+            text-align: left; font-weight: 600; padding: 5px 8px;
+            border-bottom: 2px solid #dee2e6; color: #495057; background: #f8f9fa;
+            position: sticky; top: 0; z-index: 1;
+        }
+        .claims-table td { padding: 5px 8px; border-bottom: 1px solid #f1f3f5; }
+        .claims-table tr:hover td { background: #f8f9fa; }
+        .claims-table .field-name { color: #495057; white-space: nowrap; }
+        .claims-table .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+        .source-tag {
+            display: inline-block; padding: 1px 6px; border-radius: 3px;
+            font-size: 11px; font-weight: 500;
+        }
+        .source-tag.cadastre { background: #d0ebff; color: #1864ab; }
+        .source-tag.osm { background: #d3f9d8; color: #2b8a3e; }
+        .source-tag.auto_estimate { background: #fff3bf; color: #e67700; }
+        .source-tag.three_d_survey { background: #ffe8cc; color: #d9480f; }
+        .source-tag { background: #e9ecef; color: #495057; }
+        .derived-tag {
+            display: inline-block; padding: 1px 5px; border-radius: 3px;
+            font-size: 10px; font-weight: 600; font-style: italic;
+            background: #f3f0ff; color: #7048e8; margin-right: 3px;
+        }
+
+        .url-link { color: #228be6; text-decoration: none; font-size: 11px; margin-left: 4px; }
+        .url-link:hover { text-decoration: underline; }
+
+        .bld-popup-footer {
+            padding: 10px 16px; border-top: 1px solid #e9ecef;
+            background: #f8f9fa; border-radius: 0 0 8px 8px;
+        }
+        .add-claim label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 3px; color: #495057; }
+        .add-claim .row { display: flex; gap: 6px; margin-bottom: 6px; }
+        .add-claim .row > * { flex: 1; }
+        .add-claim select, .add-claim input {
+            width: 100%; padding: 5px 6px; font-size: 12px;
+            border: 1px solid #ccc; border-radius: 3px;
+            height: 28px; box-sizing: border-box;
+        }
+        .add-claim .actions { display: flex; gap: 6px; }
+        .add-claim .actions button {
+            padding: 4px 12px; font-size: 12px; cursor: pointer;
+            border: 1px solid #ccc; border-radius: 3px;
+        }
+        .btn-save { background: #2b8a3e; color: #fff; border-color: #2b8a3e; }
+        .msg { font-size: 11px; margin-top: 4px; }
+
+        .stats-bar { display: flex; gap: 16px; font-size: 12px; color: #555; }
+        .stats-bar strong { color: #222; }
+
+        /* Classification modal */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; z-index: 10000;
+            background: rgba(0,0,0,0.4); justify-content: center; align-items: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: #fff; border-radius: 8px; max-width: 720px; width: 90%;
+            max-height: 80vh; display: flex; flex-direction: column;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+        }
+        .modal-header {
+            padding: 12px 16px; border-bottom: 1px solid #e9ecef;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-header h2 { margin: 0; font-size: 15px; }
+        .modal-header button {
+            background: none; border: none; font-size: 20px; cursor: pointer;
+            color: #868e96; line-height: 1;
+        }
+        .modal-body { padding: 12px 16px; overflow-y: auto; }
+        .modal-body p { margin: 0 0 10px; font-size: 12px; color: #666; line-height: 1.5; }
+        .cls-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .cls-table th {
+            text-align: left; padding: 6px 8px; border-bottom: 2px solid #dee2e6;
+            font-weight: 600; color: #495057; position: sticky; top: 0; background: #fff;
+        }
+        .cls-table td { padding: 5px 8px; border-bottom: 1px solid #f1f3f5; }
+        .cls-table tr:hover td { background: #f8f9fa; }
+        .cls-table .cat { font-weight: 500; }
+        .cls-table .none { color: #adb5bd; }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <header>
+            <h1>Zagreb Buildings</h1>
+            <button id="loadJobsBtn" class="primary">Load Buildings with Jobs</button>
+            <button id="loadAllBtn" title="Zoom in to level 17+ to enable">Load All Buildings</button>
+            <div class="stats-bar" id="statsBar"></div>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-swatch" style="background:#2b8a3e"></div> 1-10</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:#f59f00"></div> 10-50</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:#e8590c"></div> 50-200</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:#c92a2a"></div> 200+</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:#7048e8"></div> User data</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:#bbb"></div> No jobs</div>
+            </div>
+            <button onclick="document.getElementById('classModal').classList.add('open')">Classification</button>
+        </header>
+        <div id="map"></div>
+        <div class="status"><span id="status">Pan/zoom to area of interest. "Load Buildings with Jobs" for overview, or zoom to 17+ and "Load All Buildings" to edit.</span><span id="zoom-level" style="float:right;color:#888"></span></div>
+    </div>
+
+    <div class="modal-overlay" id="classModal" onclick="if(event.target===this)this.classList.remove('open')">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Building classification &amp; job estimation</h2>
+                <button onclick="document.getElementById('classModal').classList.remove('open')">&times;</button>
+            </div>
+            <div class="modal-body" id="classModalBody"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script>
+        const API_BASE = (() => {
+            const params = new URLSearchParams(window.location.search);
+            const explicit = params.get('apiBase') || window.localStorage.getItem('jobsApiBase');
+            if (explicit) return explicit.replace(/\/$/, '');
+            // Production: nginx proxies /zgrade/api/ to the API server
+            if (window.location.pathname.startsWith('/zgrade')) {
+                return window.location.origin + '/zgrade/api';
+            }
+            const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+            const hostname = window.location.hostname || 'localhost';
+            return `${protocol}//${hostname}:3000`;
+        })();
+
+        // Classification reference data (mirrors server.js classifyBuilding + estimateJobs)
+        const CLASSIFICATIONS = [
+            { code: '201', name: 'POSLOVNA ZGRADA', category: 'office', ratio: 0.65, density: 28 },
+            { code: '207', name: 'UPRAVNA ZGRADA', category: 'office', ratio: 0.65, density: 28 },
+            { code: '200', name: 'POSLOVNE ZGRADE (OPĆE)', category: 'office', ratio: 0.65, density: 28 },
+            { code: '901', name: 'PODZEMNA POSLOVNA ZGRADA', category: 'office', ratio: 0.65, density: 28 },
+            { code: '103', name: 'ZGRADA MJEŠOVITE UPORABE', category: 'mixed_commercial', ratio: 0.16, density: 32 },
+            { code: '202', name: 'HOTEL', category: 'hospitality', ratio: 0.75, density: 30 },
+            { code: '204', name: 'PRENOĆIŠTE', category: 'hospitality', ratio: 0.75, density: 30 },
+            { code: '205', name: 'RESTORAN', category: 'hospitality', ratio: 0.75, density: 30 },
+            { code: '206', name: 'ZGRADA ZA IZNAJMLJIVANJE', category: 'hospitality', ratio: 0.75, density: 30 },
+            { code: '211', name: 'BENZINSKA STANICA', category: 'retail', ratio: 0.6, density: 32 },
+            { code: '209', name: 'SERVISNA ZGRADA', category: 'retail', ratio: 0.6, density: 32 },
+            { code: '302', name: 'ŠKOLA', category: 'public_education', ratio: 0.9, density: 38 },
+            { code: '303', name: 'DJEČJI VRTIĆ', category: 'public_education', ratio: 0.9, density: 38 },
+            { code: '301', name: 'SVEUČILIŠTE', category: 'public_education', ratio: 0.9, density: 38 },
+            { code: '304', name: 'BOLNICA', category: 'public_health', ratio: 0.9, density: 30 },
+            { code: '305', name: 'AMBULANTA', category: 'public_health', ratio: 0.9, density: 30 },
+            { code: '318', name: 'JAVNA ZGRADA', category: 'public_admin', ratio: 0.6, density: 30 },
+            { code: '300', name: 'JAVNE ZGRADE (OPĆE)', category: 'public_admin', ratio: 0.6, density: 30 },
+            { code: '329', name: 'ZGRADA AUTOBUSNOG KOLODVORA', category: 'public_admin', ratio: 0.6, density: 30 },
+            { code: '328', name: 'ZGRADA ŽELJEZNIČKOG KOLODVORA', category: 'public_admin', ratio: 0.6, density: 30 },
+            { code: '210', name: 'ZGRADA ZA PRIJEM PUTNIKA', category: 'public_admin', ratio: 0.6, density: 30 },
+            { code: '214', name: 'STADION', category: 'public_admin', ratio: 0.2, density: 30 },
+            { code: '212', name: 'SPORTSKA DVORANA', category: 'public_admin', ratio: 0.2, density: 30 },
+            { code: '213', name: 'ZATVORENI BAZEN', category: 'public_admin', ratio: 0.2, density: 30 },
+            { code: '616', name: 'INDUSTRIJSKA ZGRADA', category: 'industrial', ratio: 0.7, density: 90 },
+            { code: '607', name: 'HALA', category: 'logistics', ratio: 0.5, density: 100 },
+            { code: '615', name: 'SKLADIŠTE', category: 'logistics', ratio: 0.5, density: 100 },
+            { code: '608', name: 'OTVORENA HALA', category: 'logistics', ratio: 0.5, density: 100 },
+            { code: '609', name: 'HANGAR', category: 'logistics', ratio: 0.5, density: 100 },
+            { code: '902', name: 'PODZEMNA GARAŽA', category: 'none', ratio: 0, density: 0 },
+            { code: '601', name: 'GOSPODARSKA ZGRADA (≥2000 m²)', category: 'retail', ratio: 0.35, density: 32, note: '≥2000 m²' },
+            { code: '601', name: 'GOSPODARSKA ZGRADA (500-2000 m²)', category: 'mixed_commercial', ratio: 0.16, density: 32, note: '500-2000 m²' },
+            { code: '100', name: 'ZGRADA (≥1000 m²)', category: 'mixed_commercial', ratio: 0.2, density: 32, note: '≥1000 m²' },
+        ];
+
+        // Render classification modal on first open
+        (function renderClassModal() {
+            const body = document.getElementById('classModalBody');
+            let html = `<p>
+                Jobs are estimated as: <strong>footprint × (floors × commercial ratio) / density</strong>.<br>
+                Density = gross m² per worker. Sources: BCO Guide to Specification (offices ~25-30 m²/worker),
+                RICS valuation guidance (retail ~20-35), US GSA space standards, ILO/UNWTO (hospitality ~25-35).
+                These are rough international benchmarks — actual values vary by building.
+            </p>`;
+            html += `<table class="cls-table">
+                <thead><tr>
+                    <th>Code</th><th>Type</th><th>Category</th>
+                    <th>Commercial ratio</th><th>Density (m²/job)</th><th>Note</th>
+                </tr></thead><tbody>`;
+            for (const c of CLASSIFICATIONS) {
+                const isNone = c.category === 'none';
+                html += `<tr class="${isNone ? 'none' : ''}">
+                    <td>${c.code}</td>
+                    <td>${c.name}</td>
+                    <td class="cat">${c.category}</td>
+                    <td>${isNone ? '—' : (c.ratio * 100).toFixed(0) + '%'}</td>
+                    <td>${isNone ? '—' : c.density}</td>
+                    <td>${c.note || ''}</td>
+                </tr>`;
+            }
+            html += `</tbody></table>`;
+            html += `<p style="margin-top:10px">
+                All other type codes (residential, auxiliary, ruins, etc.) are classified as <strong>none</strong> — no jobs estimated.
+                Floor count defaults by category if no height data: office 4, mixed 5, industrial 1, logistics 1, hospitality 4, education 2, health 4, admin 3, retail 1.
+            </p>`;
+            body.innerHTML = html;
+        })();
+
+        const DISPLAY_FIELDS = ['id', 'area_m2', 'height_m', 'floors', 'jobs', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'building_type_desc'];
+        const KNOWN_FIELDS = ['area_m2', 'height_m', 'floors', 'jobs', 'pupils', 'visitors', 'rent_eur_m2', 'building_type'];
+        const FIELD_LABELS = {
+            id: 'ID', area_m2: 'Area (m\u00B2)', height_m: 'Height (m)', floors: 'Floors',
+            jobs: 'Jobs', pupils: 'Pupils', visitors: 'Visitors', rent_eur_m2: 'Rent (\u20AC/m\u00B2)',
+            building_type: 'Type code', building_type_desc: 'Type description',
+        };
+        const SYSTEM_SOURCES = new Set(['cadastre', '3d_survey', 'auto_estimate', 'osm']);
+
+        // Building type codes for dropdown (loaded from server)
+        let BUILDING_TYPES = [];
+        fetch(`${API_BASE}/api/building-types`)
+            .then(r => r.json())
+            .then(types => { BUILDING_TYPES = types; })
+            .catch(() => {});
+
+        const MIN_ZOOM_ALL = 17;   // "Load All" requires this zoom level
+        const MIN_ZOOM_EDIT = 17;  // Popups & editing require this zoom level
+
+        const statusEl = document.getElementById('status');
+        const statsBar = document.getElementById('statsBar');
+        const loadJobsBtn = document.getElementById('loadJobsBtn');
+        const loadAllBtn = document.getElementById('loadAllBtn');
+        const zoomEl = document.getElementById('zoom-level');
+
+        function setStatus(msg, isErr) {
+            statusEl.textContent = msg;
+            statusEl.classList.toggle('err', !!isErr);
+        }
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+
+        const map = L.map('map', {
+            zoomSnap: 1,               // snap to integer zoom (like Google Maps)
+            zoomDelta: 1,              // keyboard +/- jumps by 1
+            wheelPxPerZoomLevel: 120,  // pixels of scroll per zoom level
+            wheelDebounceTime: 100,    // accumulate rapid scrolls into one zoom jump
+        }).setView([45.815, 15.982], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors', maxZoom: 19,
+            updateWhenZooming: false,  // load tiles only after zoom finishes
+        }).addTo(map);
+
+        // Prevent zoom animation queuing: cancel in-flight zoom before starting new one
+        const origPerformZoom = map.scrollWheelZoom._performZoom;
+        map.scrollWheelZoom._performZoom = function () {
+            if (map._animatingZoom) {
+                map._onZoomTransitionEnd();   // force-finish current animation
+            }
+            origPerformZoom.call(this);
+        };
+
+        // Track current data mode so we know what interaction is allowed
+        let currentMode = null; // null | 'heatmap' | 'jobs' | 'all'
+
+        function updateZoomUI() {
+            const z = map.getZoom();
+            zoomEl.textContent = 'z' + z.toFixed(1);
+            const canLoadAll = z >= MIN_ZOOM_ALL;
+            loadAllBtn.disabled = !canLoadAll;
+            loadAllBtn.title = canLoadAll ? '' : `Zoom in to level ${MIN_ZOOM_ALL}+ to enable`;
+        }
+        map.on('zoomend', updateZoomUI);
+        updateZoomUI();
+
+        // ─── Right-anchored popup: opens to the right, tip points left ──────
+        const RightPopup = L.Popup.extend({
+            _updatePosition: function () {
+                if (!this._map) return;
+                const pos = this._map.latLngToLayerPoint(this._latlng);
+                const offset = L.point(this.options.offset || [0, 0]);
+                const container = this._container;
+                const containerHeight = container.offsetHeight;
+                // Anchor from left-center of popup
+                L.DomUtil.setPosition(container, pos.add([offset.x, offset.y - containerHeight / 2]));
+            },
+            _adjustPan: function () {
+                if (!this.options.autoPan || !this._map) return;
+                const container = this._container;
+                const mapSize = this._map.getSize();
+                const anchor = this._map.latLngToContainerPoint(this._latlng);
+                const offset = L.point(this.options.offset || [0, 0]);
+                const popW = container.offsetWidth;
+                const popH = container.offsetHeight;
+                const padTL = L.point(this.options.autoPanPaddingTopLeft || [20, 20]);
+                const padBR = L.point(this.options.autoPanPaddingBottomRight || [20, 20]);
+
+                // Popup rect in container coords
+                const left = anchor.x + offset.x;
+                const right = left + popW;
+                const top = anchor.y + offset.y - popH / 2;
+                const bottom = top + popH;
+
+                let dx = 0, dy = 0;
+                if (right + padBR.x > mapSize.x) dx = right + padBR.x - mapSize.x;
+                if (left - padTL.x < 0) dx = left - padTL.x;
+                if (bottom + padBR.y > mapSize.y) dy = bottom + padBR.y - mapSize.y;
+                if (top - padTL.y < 0) dy = top - padTL.y;
+
+                if (dx || dy) {
+                    this._map.panBy([dx, dy], { animate: true, duration: 0.3 });
+                }
+            },
+        });
+
+        // ─── Building & heatmap layers ──────────────────────────────────────
+        let buildingsLayer = null;
+        let heatmapLayer = null;
+
+        function jobsColor(jobs) {
+            if (jobs >= 200) return '#c92a2a';
+            if (jobs >= 50) return '#e8590c';
+            if (jobs >= 10) return '#f59f00';
+            return '#2b8a3e';
+        }
+
+        function buildingStyle(feature) {
+            const p = feature.properties || {};
+            const jobs = p.effective_jobs || 0;
+            if (p.has_user_data) {
+                return { color: '#7048e8', weight: 2.5, fillColor: '#7048e8', fillOpacity: 0.35 };
+            }
+            if (jobs > 0) {
+                const c = jobsColor(jobs);
+                return { color: c, weight: 1, fillColor: c, fillOpacity: 0.45 };
+            }
+            return { color: '#888', weight: 0.5, fillColor: '#bbb', fillOpacity: 0.12 };
+        }
+
+        function updateStats(geojson) {
+            const features = geojson.features || [];
+            let totalJobs = 0, withJobs = 0, userCount = 0;
+            for (const f of features) {
+                const p = f.properties || {};
+                if (p.effective_jobs > 0) { totalJobs += p.effective_jobs; withJobs++; }
+                if (p.has_user_data) userCount++;
+            }
+            statsBar.innerHTML = `
+                <span><strong>${features.length.toLocaleString()}</strong> buildings</span>
+                <span><strong>${withJobs.toLocaleString()}</strong> with jobs</span>
+                <span><strong>${totalJobs.toLocaleString()}</strong> total jobs</span>
+                ${userCount ? `<span><strong>${userCount}</strong> with user data</span>` : ''}
+            `;
+        }
+
+        // ─── Source tag CSS ──────────────────────────────────────────────────
+        function sourceTagClass(source) {
+            if (source === 'cadastre') return 'cadastre';
+            if (source === 'osm') return 'osm';
+            if (source === 'auto_estimate') return 'auto_estimate';
+            if (source === '3d_survey') return 'three_d_survey';
+            return '';
+        }
+
+        // ─── Detail cache for current popup ──────────────────────────────────
+        let currentDetail = null;
+        let osmOverlayLayer = null;
+        let osmOverlayVisible = false;
+
+        // ─── Popup HTML builder ──────────────────────────────────────────────
+        function buildPopupHtml(detail, sourceFilter) {
+            const d = detail;
+            const claims = d.claims || {};
+            const sources = d.sources || [];
+            const cadastreId = d.cadastre_building_id;
+
+            // Filter dropdown
+            const filterOptions = ['<option value="">All sources</option>'];
+            for (const s of sources) {
+                const sel = sourceFilter === s ? ' selected' : '';
+                filterOptions.push(`<option value="${escapeHtml(s)}"${sel}>${escapeHtml(s)}</option>`);
+            }
+
+            // Claims table rows
+            let claimsHtml = '';
+            for (const field of DISPLAY_FIELDS) {
+                const arr = claims[field];
+                if (!arr || arr.length === 0) continue;
+                for (const c of arr) {
+                    if (sourceFilter && c.source !== sourceFilter) continue;
+                    const urlHtml = c.source_url
+                        ? `<a class="url-link" href="${escapeHtml(c.source_url)}" target="_blank" rel="noopener">[src]</a>`
+                        : c.url
+                        ? `<a class="url-link" href="${escapeHtml(c.url)}" target="_blank" rel="noopener">[link]</a>`
+                        : '';
+                    let displayValue;
+                    if (c.text) {
+                        displayValue = escapeHtml(c.text);
+                    } else if (field === 'area_m2' || field === 'height_m') {
+                        displayValue = Number(c.value).toFixed(1);
+                    } else {
+                        displayValue = Math.round(c.value);
+                    }
+                    const derivedTooltip = c.derived_tooltip || 'Derived value';
+                    const derivedHtml = c.derived ? `<span class="derived-tag" title="${escapeHtml(derivedTooltip)}">derived</span>` : '';
+                    claimsHtml += `<tr>
+                        <td class="field-name">${FIELD_LABELS[field]}</td>
+                        <td class="value">${displayValue}</td>
+                        <td>${derivedHtml}<span class="source-tag ${sourceTagClass(c.source)}">${escapeHtml(c.source)}</span>${urlHtml}</td>
+                    </tr>`;
+                }
+            }
+            if (!claimsHtml) {
+                claimsHtml = `<tr><td colspan="3" style="color:#adb5bd; padding:12px 8px;">
+                    ${sourceFilter ? 'No data from this source' : 'No data yet'}
+                </td></tr>`;
+            }
+
+            return `
+                <div class="bld-popup">
+                    <div class="bld-popup-header">
+                        <h3>${d.osm_name ? escapeHtml(d.osm_name) : escapeHtml(d.cadastre_building_type_name || 'Unknown type')}</h3>
+                        <div class="ids">
+                            <span class="id-toggle cadastre active">cadastre</span>
+                            ${d.osm_polygon ? `<span class="id-toggle osm" onclick="window.toggleOsmPolygon()">osm</span>` : ''}
+                            ${d.lat && d.lon ? `<a class="street-view-link" href="https://www.google.com/maps?cbll=${d.lat},${d.lon}&cbp=12,0,0,0,0&layer=c" target="_blank" rel="noopener">Street View ↗</a>` : ''}
+                        </div>
+                    </div>
+                    <div class="bld-popup-body">
+                        <div class="source-filter">
+                            <label>Source:</label>
+                            <select onchange="filterSource(this.value)">
+                                ${filterOptions.join('')}
+                            </select>
+                        </div>
+                        <table class="claims-table">
+                            <thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead>
+                            <tbody>${claimsHtml}</tbody>
+                        </table>
+                    </div>
+                    <div class="bld-popup-footer">
+                        <div class="add-claim">
+                            <label>Add a data point</label>
+                            <div class="row">
+                                <select id="claimField" onchange="window.onClaimFieldChange()">
+                                    ${KNOWN_FIELDS.map(f => `<option value="${f}">${FIELD_LABELS[f]}</option>`).join('')}
+                                </select>
+                                <span id="claimValueWrap">
+                                    <input type="number" id="claimValue" placeholder="Value" step="any" style="width:100%">
+                                </span>
+                            </div>
+                            <div class="row">
+                                <input type="url" id="claimUrl" placeholder="Supporting URL (optional)">
+                                <input type="text" id="claimSource" placeholder="Your name / source" maxlength="100"
+                                    value="${escapeHtml(localStorage.getItem('claimSource') || '')}"
+                                    onchange="localStorage.setItem('claimSource', this.value)">
+                            </div>
+                            <div class="actions">
+                                <button class="btn-save" onclick="saveClaim(${cadastreId})">Save</button>
+                            </div>
+                            <div class="msg" id="claimMsg"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Update the currently open popup's content
+        function updateOpenPopup(html) {
+            map.eachLayer(l => {
+                if (l instanceof RightPopup && l._map) {
+                    l.setContent(html);
+                    setTimeout(() => { if (l._map) l._updatePosition(); }, 50);
+                }
+            });
+        }
+
+        window.filterSource = function (source) {
+            if (!currentDetail) return;
+            updateOpenPopup(buildPopupHtml(currentDetail, source || null));
+        };
+
+        function removeOsmOverlay() {
+            if (osmOverlayLayer) {
+                map.removeLayer(osmOverlayLayer);
+                osmOverlayLayer = null;
+            }
+            osmOverlayVisible = false;
+        }
+
+        window.toggleOsmPolygon = function () {
+            if (!currentDetail || !currentDetail.osm_polygon) return;
+            if (osmOverlayVisible) {
+                removeOsmOverlay();
+            } else {
+                // Draw OSM polygon as a green overlay
+                const latlngs = currentDetail.osm_polygon.map(c => [c[1], c[0]]);
+                osmOverlayLayer = L.polygon(latlngs, {
+                    color: '#2b8a3e',
+                    weight: 2.5,
+                    fillColor: '#69db7c',
+                    fillOpacity: 0.25,
+                    dashArray: '6 4',
+                    interactive: false,
+                });
+                osmOverlayLayer.addTo(map);
+                osmOverlayVisible = true;
+            }
+            // Update toggle button state
+            const btn = document.querySelector('.id-toggle.osm');
+            if (btn) btn.classList.toggle('active', osmOverlayVisible);
+        };
+
+        window.onClaimFieldChange = function () {
+            const field = document.getElementById('claimField').value;
+            const wrap = document.getElementById('claimValueWrap');
+            if (!wrap) return;
+            if (field === 'building_type' && BUILDING_TYPES.length > 0) {
+                // Replace number input with dropdown of cadastre types
+                const opts = BUILDING_TYPES.map(t =>
+                    `<option value="${escapeHtml(t.code)}">${escapeHtml(t.code)} – ${escapeHtml(t.name)}</option>`
+                ).join('');
+                wrap.innerHTML = `<select id="claimValue" style="width:100%">${opts}</select>`;
+            } else {
+                wrap.innerHTML = `<input type="number" id="claimValue" placeholder="Value" step="any" style="width:100%">`;
+            }
+        };
+
+        function ensurePopupVisible(popup) {
+            if (!popup._map || !popup._container) return;
+            const container = popup._container;
+            const mapSize = popup._map.getSize();
+            const anchor = popup._map.latLngToContainerPoint(popup._latlng);
+            const offset = L.point(popup.options.offset || [0, 0]);
+            const popW = container.offsetWidth;
+            const popH = container.offsetHeight;
+            const padTop = 50, padRight = 20, padBottom = 40, padLeft = 20;
+
+            const left = anchor.x + offset.x;
+            const right = left + popW;
+            const top = anchor.y + offset.y - popH / 2;
+            const bottom = top + popH;
+
+            let dx = 0, dy = 0;
+            if (right + padRight > mapSize.x) dx = right + padRight - mapSize.x;
+            if (left - padLeft < 0) dx = left - padLeft;
+            if (bottom + padBottom > mapSize.y) dy = bottom + padBottom - mapSize.y;
+            if (top - padTop < 0) dy = top - padTop;
+
+            if (dx || dy) popup._map.panBy([dx, dy], { animate: true, duration: 0.3 });
+        }
+
+        async function onBuildingClick(feature, layer) {
+            // Only allow popups/editing at high zoom
+            if (currentMode !== 'all') return;
+
+            // Clean up previous OSM overlay
+            removeOsmOverlay();
+
+            const cadastreId = feature.properties.cadastre_building_id;
+
+            // Position: put the building in the left ~1/3 of the map
+            // so the popup has room to open to the right
+            const bounds = layer.getBounds();
+            const center = bounds.getCenter();
+            const rightEdge = bounds.getEast();
+            const mapSize = map.getSize();
+            // Target: building center at ~30% from left edge
+            const targetX = mapSize.x * 0.28;
+            const currentPoint = map.latLngToContainerPoint(center);
+            const dx = currentPoint.x - targetX;
+            const currentCenter = map.getCenter();
+            const shiftedCenter = map.containerPointToLatLng(
+                map.latLngToContainerPoint(currentCenter).add([dx, 0])
+            );
+            map.panTo(shiftedCenter, { animate: true, duration: 0.3 });
+
+            // Close any existing popup
+            map.closePopup();
+
+            // Compute offset: from building center to right edge + gap
+            const popup = layer._bldPopup;
+            const centerPx = map.latLngToContainerPoint(center);
+            const rightPx = map.latLngToContainerPoint(L.latLng(center.lat, rightEdge));
+            const halfWidth = Math.max(rightPx.x - centerPx.x, 10);
+            popup.options.offset = [halfWidth + 15, 0];
+
+            // Show loading state, open at building center
+            popup.setContent('Loading...');
+            popup.setLatLng(center);
+            popup.openOn(map);
+
+            // When popup closes, clean up OSM overlay
+            popup.once('remove', () => removeOsmOverlay());
+
+            try {
+                const res = await fetch(`${API_BASE}/api/building/${cadastreId}`);
+                if (!res.ok) throw new Error('Not found');
+                currentDetail = await res.json();
+                popup.setContent(buildPopupHtml(currentDetail, null));
+
+                // Re-pan after content is set (popup height may have changed)
+                setTimeout(() => {
+                    if (!popup._map) return;
+                    popup._updatePosition();
+                    ensurePopupVisible(popup);
+                }, 50);
+            } catch (e) {
+                currentDetail = null;
+                popup.setContent('<div style="padding:12px; color:#868e96;">Failed to load building data.</div>');
+            }
+        }
+
+        window.saveClaim = async function (cadastreId) {
+            const field = document.getElementById('claimField').value;
+            const value = parseFloat(document.getElementById('claimValue').value);
+            const source = document.getElementById('claimSource').value.trim();
+            const source_url = document.getElementById('claimUrl').value.trim() || undefined;
+            const msgEl = document.getElementById('claimMsg');
+
+            if (!field) { msgEl.textContent = 'Select a field'; msgEl.style.color = '#e03131'; return; }
+            if (isNaN(value)) { msgEl.textContent = 'Value must be a number'; msgEl.style.color = '#e03131'; return; }
+            if (!source) { msgEl.textContent = 'Source is required'; msgEl.style.color = '#e03131'; return; }
+
+            try {
+                const body = { cadastre_building_id: cadastreId, field, value, source };
+                if (source_url) body.source_url = source_url;
+
+                const res = await fetch(`${API_BASE}/api/claims`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (!res.ok) {
+                    const d = await res.json();
+                    throw new Error(d.error || 'Save failed');
+                }
+                msgEl.textContent = 'Saved'; msgEl.style.color = '#2b8a3e';
+
+                // Refresh popup data
+                const detailRes = await fetch(`${API_BASE}/api/building/${cadastreId}`);
+                if (detailRes.ok) {
+                    currentDetail = await detailRes.json();
+                    updateOpenPopup(buildPopupHtml(currentDetail, null));
+                }
+
+                // Update feature style
+                if (buildingsLayer) {
+                    buildingsLayer.eachLayer(l => {
+                        if (l.feature?.properties?.cadastre_building_id === cadastreId) {
+                            l.feature.properties.has_user_data = true;
+                            l.setStyle(buildingStyle(l.feature));
+                        }
+                    });
+                }
+            } catch (e) {
+                msgEl.textContent = e.message; msgEl.style.color = '#e03131';
+            }
+        };
+
+
+        // ─── Helper: clear all data layers ─────────────────────────────────
+        function clearLayers() {
+            map.closePopup();
+            removeOsmOverlay();
+            if (buildingsLayer) { map.removeLayer(buildingsLayer); buildingsLayer = null; }
+            if (heatmapLayer) { map.removeLayer(heatmapLayer); heatmapLayer = null; }
+            statsBar.innerHTML = '';
+        }
+
+        // ─── Load buildings with jobs (polygons, view-only, no popups) ───────
+        loadJobsBtn.addEventListener('click', async () => {
+            const b = map.getBounds();
+            const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+            loadJobsBtn.textContent = 'Loading...';
+            loadJobsBtn.disabled = true;
+            try {
+                // Fetch heatmap data in parallel with polygon data
+                const zoom = map.getZoom();
+                const showPolygons = zoom >= 15;
+
+                if (showPolygons) {
+                    // At zoom 15+: show polygons for buildings with jobs
+                    const res = await fetch(`${API_BASE}/api/buildings?bbox=${bbox}&jobs_only=1`);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const geojson = await res.json();
+                    clearLayers();
+                    currentMode = 'jobs';
+                    let hoveredLayer = null;
+                    buildingsLayer = L.geoJSON(geojson, {
+                        style: buildingStyle,
+                        onEachFeature: (feature, layer) => {
+                            layer._bldPopup = new RightPopup({
+                                maxWidth: 500, minWidth: 460,
+                                autoPan: false, className: 'popup-right',
+                            });
+                            layer.on('click', () => onBuildingClick(feature, layer));
+                            layer.on('mouseover', () => {
+                                if (hoveredLayer && hoveredLayer !== layer) {
+                                    hoveredLayer.setStyle(buildingStyle(hoveredLayer.feature));
+                                }
+                                hoveredLayer = layer;
+                                layer.setStyle({ weight: 3, fillOpacity: 0.6 });
+                                layer.bringToFront();
+                            });
+                            layer.on('mouseout', () => {
+                                if (hoveredLayer === layer) hoveredLayer = null;
+                                layer.setStyle(buildingStyle(feature));
+                            });
+                        },
+                    }).addTo(map);
+                    updateStats(geojson);
+                    setStatus(`Loaded ${geojson.features.length.toLocaleString()} buildings with jobs (view only).`);
+                } else {
+                    // At zoom <15: show heatmap
+                    const res = await fetch(`${API_BASE}/api/buildings/heatmap?bbox=${bbox}`);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const points = await res.json();
+                    clearLayers();
+                    currentMode = 'heatmap';
+                    const heatData = points.map(p => [p.lat, p.lng, p.jobs]);
+                    heatmapLayer = L.heatLayer(heatData, {
+                        radius: 18,
+                        blur: 22,
+                        maxZoom: 17,
+                        max: 200,
+                        gradient: {
+                            0.1: '#2b8a3e',
+                            0.3: '#f59f00',
+                            0.6: '#e8590c',
+                            1.0: '#c92a2a',
+                        },
+                    }).addTo(map);
+                    setStatus(`Heatmap: ${points.length.toLocaleString()} buildings with jobs. Zoom in for detail.`);
+                }
+            } catch (e) {
+                console.error(e);
+                setStatus(`Failed to load from ${API_BASE}. Is the server running?`, true);
+            } finally {
+                loadJobsBtn.textContent = 'Load Buildings with Jobs';
+                loadJobsBtn.disabled = false;
+            }
+        });
+
+        // ─── Load all buildings (full detail + editing, zoom 17+ only) ───────
+        loadAllBtn.addEventListener('click', async () => {
+            if (map.getZoom() < MIN_ZOOM_ALL) {
+                setStatus(`Zoom in to level ${MIN_ZOOM_ALL}+ to load all buildings.`);
+                return;
+            }
+            const b = map.getBounds();
+            const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+            loadAllBtn.textContent = 'Loading...';
+            loadAllBtn.disabled = true;
+            try {
+                const res = await fetch(`${API_BASE}/api/buildings?bbox=${bbox}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const geojson = await res.json();
+                clearLayers();
+                currentMode = 'all';
+                let hoveredLayer = null;
+                buildingsLayer = L.geoJSON(geojson, {
+                    style: buildingStyle,
+                    onEachFeature: (feature, layer) => {
+                        layer._bldPopup = new RightPopup({
+                            maxWidth: 500, minWidth: 460,
+                            autoPan: false, className: 'popup-right',
+                        });
+                        layer.on('click', () => onBuildingClick(feature, layer));
+                        layer.on('mouseover', () => {
+                            if (hoveredLayer && hoveredLayer !== layer) {
+                                hoveredLayer.setStyle(buildingStyle(hoveredLayer.feature));
+                            }
+                            hoveredLayer = layer;
+                            layer.setStyle({ weight: 3, fillOpacity: 0.6 });
+                            layer.bringToFront();
+                        });
+                        layer.on('mouseout', () => {
+                            if (hoveredLayer === layer) hoveredLayer = null;
+                            layer.setStyle(buildingStyle(feature));
+                        });
+                    },
+                }).addTo(map);
+                updateStats(geojson);
+                setStatus(`Loaded ${geojson.features.length.toLocaleString()} buildings. Click any building to view/edit.`);
+            } catch (e) {
+                console.error(e);
+                setStatus(`Failed to load from ${API_BASE}. Is the server running?`, true);
+            } finally {
+                loadAllBtn.textContent = 'Load All Buildings';
+                updateZoomUI();
+            }
+        });
+    </script>
+</body>
+
+</html>
