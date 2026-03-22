@@ -130,6 +130,9 @@
         .source-tag.osm { background: #d3f9d8; color: #2b8a3e; }
         .source-tag.auto_estimate { background: #fff3bf; color: #e67700; }
         .source-tag.three_d_survey { background: #ffe8cc; color: #d9480f; }
+        .source-tag.meta_lidar { background: #e5dbff; color: #7048e8; }
+        .source-tag.microsoft { background: #c3fae8; color: #0ca678; }
+        .source-tag.google { background: #fcc2d7; color: #c2255c; }
         .source-tag { background: #e9ecef; color: #495057; }
         .derived-tag {
             display: inline-block; padding: 1px 5px; border-radius: 3px;
@@ -341,7 +344,7 @@
             }
             const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
             const hostname = window.location.hostname || 'localhost';
-            return `${protocol}//${hostname}:3000`;
+            return `${protocol}//${hostname}:3001`;
         })();
 
         // ─── OSM fetch (direct from Overpass API) ────────────────────────────
@@ -373,87 +376,95 @@
             return null;
         }
 
-        async function fetchOsmBuilding(lat, lon) {
+        async function fetchOvertureBuilding(lat, lon) {
             try {
-                const q = `[out:json][timeout:8];
-                    is_in(${lat},${lon})->.a;
-                    (way(pivot.a)[building];rel(pivot.a)[building];);
-                    out geom;`;
                 const controller = new AbortController();
                 const timeout = setTimeout(() => controller.abort(), 10000);
-                const resp = await fetch('https://overpass-api.de/api/interpreter', {
-                    method: 'POST',
-                    body: 'data=' + encodeURIComponent(q),
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                const resp = await fetch(`${API_BASE}/api/building/overture?lat=${lat}&lon=${lon}`, {
                     signal: controller.signal,
                 });
                 clearTimeout(timeout);
                 if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
                 const data = await resp.json();
-                if (!data.elements || data.elements.length === 0) return null;
+                if (!data) return null;
 
-                const el = data.elements.find(e => e.type === 'relation') || data.elements[0];
-                const tags = el.tags || {};
-                const geomNodes = extractGeomNodes(el);
-                const area = geomNodes ? computeAreaM2(geomNodes) : null;
-                let polygon = null;
-                if (geomNodes && geomNodes.length >= 3) {
-                    const coords = geomNodes.map(n => [n.lon, n.lat]);
-                    if (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1]) {
-                        coords.push(coords[0]);
-                    }
-                    polygon = coords;
+                // Compute area from polygon if available
+                let area = null;
+                if (data.polygon && data.polygon.length >= 3) {
+                    const nodes = data.polygon.map(c => ({ lon: c[0], lat: c[1] }));
+                    area = computeAreaM2(nodes);
                 }
+
                 return {
-                    osm_id: (el.type === 'way' ? 'w' : 'r') + el.id,
-                    height: tags.height ? parseFloat(tags.height) : null,
-                    levels: tags['building:levels'] ? parseInt(tags['building:levels'], 10) : null,
-                    name: tags.name || null,
-                    building_type: tags.building || null,
-                    start_date: tags.start_date ? parseInt(tags.start_date, 10) : null,
+                    osm_id: data.osm_id || null,
+                    height: data.height,
+                    num_floors: data.num_floors,
+                    name: data.name,
+                    subtype: data.subtype,
+                    class: data.class,
                     area_m2: area,
-                    polygon,
+                    polygon: data.polygon,
+                    sources: data.sources || {},
                 };
             } catch (e) {
-                if (e.name === 'AbortError') return null; // timeout — silent
-                throw e; // propagate to caller
+                if (e.name === 'AbortError') return null;
+                throw e;
             }
         }
 
-        function mergeOsmIntoDetail(detail, osmData) {
-            if (!osmData || detail._osmMerged) return;
-            detail._osmMerged = true;
-            detail.osm_id = osmData.osm_id;
-            detail.osm_name = osmData.name;
-            detail.osm_building_type = osmData.building_type;
-            detail.osm_polygon = osmData.polygon;
+        function overtureSourceName(sources, property) {
+            const s = sources[property] || sources._feature;
+            if (!s) return 'overture';
+            return OVERTURE_DATASET_MAP[s.dataset] || s.dataset || 'overture';
+        }
+
+        function mergeOvertureIntoDetail(detail, overtureData) {
+            if (!overtureData || detail._overtureMerged) return;
+            detail._overtureMerged = true;
+            detail.osm_id = overtureData.osm_id;
+            detail.osm_name = overtureData.name;
+            detail.overture_polygon = overtureData.polygon;
             const claims = detail.claims || {};
+            const src = overtureData.sources || {};
+
             // Add OSM ID
-            if (osmData.osm_id) {
+            if (overtureData.osm_id) {
                 if (!claims.id) claims.id = [];
-                const osmType = osmData.osm_id[0] === 'w' ? 'way' : 'relation';
-                const osmNumeric = osmData.osm_id.slice(1);
-                claims.id.push({ value: 0, source: 'osm', text: osmData.osm_id, url: `https://www.openstreetmap.org/${osmType}/${osmNumeric}` });
+                const osmType = overtureData.osm_id[0] === 'w' ? 'way' : 'relation';
+                const osmNumeric = overtureData.osm_id.slice(1);
+                claims.id.push({ value: 0, source: 'osm', text: overtureData.osm_id, url: `https://www.openstreetmap.org/${osmType}/${osmNumeric}` });
             }
-            if (osmData.height != null) {
+            if (overtureData.height != null) {
                 if (!claims.height_m) claims.height_m = [];
-                claims.height_m.push({ value: osmData.height, source: 'osm' });
+                claims.height_m.push({ value: overtureData.height, source: overtureSourceName(src, 'height') });
             }
-            if (osmData.levels != null) {
+            if (overtureData.num_floors != null) {
                 if (!claims.floors) claims.floors = [];
-                claims.floors.push({ value: osmData.levels, source: 'osm' });
+                claims.floors.push({ value: overtureData.num_floors, source: overtureSourceName(src, 'num_floors') });
             }
-            if (osmData.area_m2 != null) {
+            if (overtureData.area_m2 != null) {
                 if (!claims.area_m2) claims.area_m2 = [];
-                claims.area_m2.push({ value: osmData.area_m2, source: 'osm', derived: true });
+                claims.area_m2.push({ value: overtureData.area_m2, source: overtureSourceName(src, '_feature'), derived: true });
             }
-            if (osmData.start_date != null && !isNaN(osmData.start_date)) {
-                if (!claims.year_built) claims.year_built = [];
-                claims.year_built.push({ value: osmData.start_date, source: 'osm' });
+            if (overtureData.subtype) {
+                if (!claims.building_subtype) claims.building_subtype = [];
+                claims.building_subtype.push({ value: 0, source: overtureSourceName(src, 'subtype'), text: overtureData.subtype });
             }
+            if (overtureData.class) {
+                if (!claims.building_class) claims.building_class = [];
+                claims.building_class.push({ value: 0, source: overtureSourceName(src, 'class'), text: overtureData.class });
+            }
+
             // Update sources list
             if (!detail.sources) detail.sources = [];
-            if (!detail.sources.includes('osm')) detail.sources.push('osm');
+            const addedSources = new Set();
+            for (const key of Object.keys(src)) {
+                const name = OVERTURE_DATASET_MAP[src[key]?.dataset] || src[key]?.dataset;
+                if (name && !addedSources.has(name)) {
+                    addedSources.add(name);
+                    if (!detail.sources.includes(name)) detail.sources.push(name);
+                }
+            }
             detail.sources.sort();
         }
 
@@ -527,15 +538,24 @@
             body.innerHTML = html;
         })();
 
-        const DISPLAY_FIELDS = ['id', 'area_m2', 'height_m', 'floors', 'year_built', 'jobs', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'building_type_desc'];
-        const KNOWN_FIELDS = ['area_m2', 'height_m', 'floors', 'year_built', 'jobs', 'pupils', 'visitors', 'rent_eur_m2', 'building_type'];
+        const DISPLAY_FIELDS = ['id', 'area_m2', 'height_m', 'floors', 'year_built', 'jobs', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'building_type_desc', 'building_subtype', 'building_class', 'history_url'];
+        const KNOWN_FIELDS = ['area_m2', 'height_m', 'floors', 'year_built', 'jobs', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'history_url'];
         const FIELD_LABELS = {
             id: 'ID', area_m2: 'Površina (m\u00B2)', height_m: 'Visina (m)', floors: 'Katovi',
-            year_built: 'Godina izgradnje',
             jobs: 'Radna mjesta', pupils: 'Učenici', visitors: 'Posjetitelji', rent_eur_m2: 'Najam (\u20AC/m\u00B2)',
             building_type: 'Šifra vrste', building_type_desc: 'Opis vrste',
+            year_built: 'Godina izgradnje', history_url: 'Povijest zgrade',
+            building_subtype: 'Vrsta', building_class: 'Klasa',
         };
-        const SYSTEM_SOURCES = new Set(['cadastre', '3d_survey', 'auto_estimate', 'osm']);
+        const SYSTEM_SOURCES = new Set(['cadastre', '3d_survey', 'auto_estimate', 'osm', 'meta_lidar', 'microsoft', 'google']);
+
+        // Map Overture dataset names to display-friendly source names
+        const OVERTURE_DATASET_MAP = {
+            'OpenStreetMap': 'osm',
+            'metaLidarExtractions': 'meta_lidar',
+            'microsoftMLBuildings': 'microsoft',
+            'googleBuildingHeights': 'google',
+        };
 
         // Building type codes for dropdown (loaded from server)
         let BUILDING_TYPES = [];
@@ -705,6 +725,9 @@
             if (source === 'osm') return 'osm';
             if (source === 'auto_estimate') return 'auto_estimate';
             if (source === '3d_survey') return 'three_d_survey';
+            if (source === 'meta_lidar') return 'meta_lidar';
+            if (source === 'microsoft') return 'microsoft';
+            if (source === 'google') return 'google';
             return '';
         }
 
@@ -741,7 +764,9 @@
                         ? `<a class="url-link" href="${escapeHtml(c.url)}" target="_blank" rel="noopener">[link]</a>`
                         : '';
                     let displayValue;
-                    if (c.text) {
+                    if (field === 'history_url' && c.text) {
+                        displayValue = `<a href="${escapeHtml(c.text)}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(c.text)}</a>`;
+                    } else if (c.text) {
                         displayValue = escapeHtml(c.text);
                     } else if (field === 'area_m2' || field === 'height_m') {
                         displayValue = Number(c.value).toFixed(1);
@@ -770,7 +795,7 @@
                         <div class="ids">
                             <span style="color:#868e96;font-size:11px;">Tlocrt:</span>
                             <label class="outline-toggle"><input type="checkbox" checked disabled><span class="outline-label cadastre">katastar</span></label>
-                            ${d.osm_polygon ? `<label class="outline-toggle"><input type="checkbox" onchange="window.toggleOsmPolygon()"><span class="outline-label osm">OSM</span></label>` : ''}${osmLoadState === 'loading' ? '<span class="osm-status"><span class="osm-spinner"></span></span>' : osmLoadState === 'nodata' ? '<span class="osm-status" style="color:#2b8a3e">OSM nema zgradu na točki klika</span>' : osmLoadState && osmLoadState.startsWith('error:') ? `<span class="osm-status"><button class="osm-retry" onclick="window.retryOsm(event)" title="Pokušaj ponovo">🔄</button> OSM podaci nisu dohvaćeni <span class="osm-error">(${escapeHtml(osmLoadState.slice(6))})</span></span>` : ''}
+                            ${d.overture_polygon ? `<label class="outline-toggle"><input type="checkbox" onchange="window.toggleOverturePolygon()"><span class="outline-label osm">Overture</span></label>` : ''}${osmLoadState === 'loading' ? '<span class="osm-status"><span class="osm-spinner"></span></span>' : osmLoadState === 'nodata' ? '<span class="osm-status" style="color:#868e96">Nema podataka na točki klika</span>' : osmLoadState && osmLoadState.startsWith('error:') ? `<span class="osm-status"><button class="osm-retry" onclick="window.retryOverture(event)" title="Pokušaj ponovo">🔄</button> Podaci nisu dohvaćeni <span class="osm-error">(${escapeHtml(osmLoadState.slice(6))})</span></span>` : ''}
                         </div>
                     </div>
                     <div class="bld-popup-body">
@@ -852,12 +877,12 @@
             osmOverlayVisible = false;
         }
 
-        window.toggleOsmPolygon = function () {
-            if (!currentDetail || !currentDetail.osm_polygon) return;
+        window.toggleOverturePolygon = function () {
+            if (!currentDetail || !currentDetail.overture_polygon) return;
             if (osmOverlayVisible) {
                 removeOsmOverlay();
             } else {
-                const latlngs = currentDetail.osm_polygon.map(c => [c[1], c[0]]);
+                const latlngs = currentDetail.overture_polygon.map(c => [c[1], c[0]]);
                 osmOverlayLayer = L.polygon(latlngs, {
                     color: '#2b8a3e',
                     weight: 2.5,
@@ -871,12 +896,12 @@
             }
         };
 
-        async function loadOsmForPopup(cadastreId, popup) {
+        async function loadOvertureForPopup(cadastreId, popup) {
             try {
-                const osmData = await fetchOsmBuilding(currentDetail.lat, currentDetail.lon);
+                const overtureData = await fetchOvertureBuilding(currentDetail.lat, currentDetail.lon);
                 if (!popup._map || currentDetail?.cadastre_building_id !== cadastreId) return;
-                if (osmData) {
-                    mergeOsmIntoDetail(currentDetail, osmData);
+                if (overtureData) {
+                    mergeOvertureIntoDetail(currentDetail, overtureData);
                     osmLoadState = 'done';
                 } else {
                     osmLoadState = 'nodata';
@@ -889,17 +914,16 @@
             }
         }
 
-        window.retryOsm = function (event) {
+        window.retryOverture = function (event) {
             if (event) { event.stopPropagation(); event.preventDefault(); }
             if (!currentDetail || !currentDetail.lat) return;
-            currentDetail._osmMerged = false;
+            currentDetail._overtureMerged = false;
             osmLoadState = 'loading';
-            // Find the open popup first, before updating content
             let popup = null;
             map.eachLayer(l => { if (l instanceof RightPopup && l._map) popup = l; });
             if (!popup) return;
             popup.setContent(buildPopupHtml(currentDetail, null));
-            loadOsmForPopup(currentDetail.cadastre_building_id, popup);
+            loadOvertureForPopup(currentDetail.cadastre_building_id, popup);
         };
 
         window.onClaimFieldChange = function () {
@@ -912,6 +936,8 @@
                     `<option value="${escapeHtml(t.code)}">${escapeHtml(t.code)} – ${escapeHtml(t.name)}</option>`
                 ).join('');
                 wrap.innerHTML = `<select id="claimValue">${opts}</select>`;
+            } else if (field === 'history_url') {
+                wrap.innerHTML = `<input type="url" id="claimValue" placeholder="https://..." step="any">`;
             } else if (field === 'year_built') {
                 wrap.innerHTML = `<input type="number" id="claimValue" placeholder="npr. 1965" step="1" min="1000" max="2100">`;
             } else {
@@ -1026,9 +1052,9 @@
                     ensurePopupVisible(popup);
                 }, 50);
 
-                // Fetch OSM data in background and enrich popup
+                // Fetch Overture data in background and enrich popup
                 if (currentDetail.lat && currentDetail.lon) {
-                    loadOsmForPopup(cadastreId, popup);
+                    loadOvertureForPopup(cadastreId, popup);
                 }
             } catch (e) {
                 currentDetail = null;
@@ -1038,17 +1064,24 @@
 
         window.saveClaim = async function (cadastreId) {
             const field = document.getElementById('claimField').value;
-            const value = parseFloat(document.getElementById('claimValue').value);
+            const rawValue = document.getElementById('claimValue').value;
+            const isTextField = field === 'history_url';
+            const value = isTextField ? rawValue.trim() : parseFloat(rawValue);
             const source = document.getElementById('claimSource').value.trim();
             const source_url = document.getElementById('claimUrl').value.trim() || undefined;
             const msgEl = document.getElementById('claimMsg');
 
             if (!field) { msgEl.textContent = 'Odaberite polje'; msgEl.style.color = '#e03131'; return; }
-            if (isNaN(value)) { msgEl.textContent = 'Vrijednost mora biti broj'; msgEl.style.color = '#e03131'; return; }
-            if (value < 0) { msgEl.textContent = 'Vrijednost ne može biti negativna'; msgEl.style.color = '#e03131'; return; }
-            const limits = { area_m2: 500000, height_m: 300, floors: 100, year_built: 2100, jobs: 50000, pupils: 10000, visitors: 100000, rent_eur_m2: 1000, building_type: 999 };
-            if (limits[field] && value > limits[field]) { msgEl.textContent = `Maksimalna vrijednost za ovo polje je ${limits[field]}`; msgEl.style.color = '#e03131'; return; }
-            if (['floors', 'year_built', 'jobs', 'pupils', 'visitors', 'building_type'].includes(field) && value !== Math.floor(value)) { msgEl.textContent = 'Vrijednost mora biti cijeli broj'; msgEl.style.color = '#e03131'; return; }
+            if (isTextField) {
+                if (!value) { msgEl.textContent = 'URL je obavezan'; msgEl.style.color = '#e03131'; return; }
+                if (!value.startsWith('https://')) { msgEl.textContent = 'URL mora početi s https://'; msgEl.style.color = '#e03131'; return; }
+            } else {
+                if (isNaN(value)) { msgEl.textContent = 'Vrijednost mora biti broj'; msgEl.style.color = '#e03131'; return; }
+                if (value < 0) { msgEl.textContent = 'Vrijednost ne može biti negativna'; msgEl.style.color = '#e03131'; return; }
+                const limits = { area_m2: 500000, height_m: 300, floors: 100, year_built: 2100, jobs: 50000, pupils: 10000, visitors: 100000, rent_eur_m2: 1000, building_type: 999 };
+                if (limits[field] && value > limits[field]) { msgEl.textContent = `Maksimalna vrijednost za ovo polje je ${limits[field]}`; msgEl.style.color = '#e03131'; return; }
+                if (['floors', 'year_built', 'jobs', 'pupils', 'visitors', 'building_type'].includes(field) && value !== Math.floor(value)) { msgEl.textContent = 'Vrijednost mora biti cijeli broj'; msgEl.style.color = '#e03131'; return; }
+            }
             if (!source) { msgEl.textContent = 'Izvor je obavezan'; msgEl.style.color = '#e03131'; return; }
 
             try {
