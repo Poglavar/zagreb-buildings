@@ -268,7 +268,7 @@
     <div class="app">
         <header>
             <a href="https://zagreb.lol" target="_blank" rel="noopener" title="zagreb.lol" style="display:flex;align-items:center;flex-shrink:0;">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="28" height="28">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 860" width="28" height="24">
                     <defs>
                         <linearGradient id="logoSunGrad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#FFD700"/><stop offset="100%" stop-color="#FF8C00"/></linearGradient>
                         <style>.logo-ray{fill:#FFA100}</style>
@@ -284,18 +284,21 @@
                     </g>
                 </svg>
             </a>
-            <h1>Zgrade Zagreba</h1>
-            <button id="loadJobsBtn" class="primary">Zgrade s radnim mjestima</button>
+            <h1 style="display:flex;align-items:center;gap:6px;">Zgrade Zagreba <button onclick="document.getElementById('aboutModal').classList.add('open')" style="background:none;border:1px solid #ccc;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:1;cursor:pointer;padding:0;color:#868e96;display:inline-flex;align-items:center;justify-content:center;" title="O stranici">i</button></h1>
+            <span style="display:inline-flex;align-items:center;gap:4px;">
+                <button id="loadFieldBtn" class="primary">Zgrade s</button>
+                <select id="fieldSelect" style="padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:13px;">
+                    <option value="jobs" selected>radnim mjestima</option>
+                    <option value="height_m">visinom</option>
+                    <option value="floors">katovima</option>
+                    <option value="area_m2">površinom</option>
+                    <option value="year_built">godinom izgradnje</option>
+                    <option value="rent_eur_m2">najmom</option>
+                </select>
+            </span>
             <button id="loadAllBtn" class="secondary" title="Zumirajte na razinu 17+ za aktivaciju">Sve zgrade</button>
             <div class="stats-bar" id="statsBar"></div>
-            <div class="legend">
-                <div class="legend-item"><div class="legend-swatch" style="background:#2b8a3e"></div> 1-10</div>
-                <div class="legend-item"><div class="legend-swatch" style="background:#f59f00"></div> 10-50</div>
-                <div class="legend-item"><div class="legend-swatch" style="background:#e8590c"></div> 50-200</div>
-                <div class="legend-item"><div class="legend-swatch" style="background:#c92a2a"></div> 200+</div>
-                <div class="legend-item"><div class="legend-swatch" style="background:transparent;border:2px dashed #000"></div> Korisnički unos</div>
-                <div class="legend-item"><div class="legend-swatch" style="background:#bbb"></div> Bez radnih mjesta</div>
-            </div>
+            <div class="legend" id="legend"></div>
             <button onclick="document.getElementById('classModal').classList.add('open')">Klasifikacija</button>
             <a href="https://github.com/Poglavar/zagreb-buildings" target="_blank" rel="noopener" title="Pogledaj na GitHubu" style="display:flex;margin-left:4px;color:#333;">
                 <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -303,6 +306,31 @@
         </header>
         <div id="map"></div>
         <div class="status"><span id="status">Pomjerite kartu na područje interesa. "Zgrade s radnim mjestima" za pregled, ili zumirajte na 17+ i "Sve zgrade" za uređivanje.</span><span id="zoom-level" style="float:right;color:#888"></span></div>
+    </div>
+
+    <div class="modal-overlay" id="aboutModal" onclick="if(event.target===this)this.classList.remove('open')">
+        <div class="modal" style="max-width:480px;">
+            <div class="modal-header">
+                <h2>O stranici</h2>
+                <button onclick="document.getElementById('aboutModal').classList.remove('open')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="line-height:1.6;">
+                    Otvorena baza podataka o zgradama u Zagrebu. Nastala je jer nismo mogli pronaći postojeći izvor koji objedinjuje katastarske, visinske i druge podatke o zgradama na jednom mjestu — pa smo ga napravili sami.
+                </p>
+                <p style="line-height:1.6;">
+                    Koristimo podatke iz katastra, 3D snimki, Overture Maps i korisničkih unosa. Bazu koristimo za urbane analize, ali otvorena je svima.
+                </p>
+                <p style="line-height:1.6;">
+                    Ako imate podatke o nekoj zgradi (godina izgradnje, broj katova, najam...), pozivamo vas da ih dodate — kliknite na zgradu i ispunite formu na dnu.
+                </p>
+                <p style="line-height:1.6; margin-bottom: 0;">
+                    <a href="https://zagreb.lol" target="_blank" rel="noopener">zagreb.lol</a> — više zanimljivih informacija o Zagrebu<br>
+                    <a href="https://github.com/Poglavar/zagreb-buildings" target="_blank" rel="noopener">GitHub</a> — predložite poboljšanja ili prijavite grešku<br>
+                    <a href="https://urbangametheory.xyz" target="_blank" rel="noopener">urbangametheory.xyz</a> — želite se baviti urbanim planiranjem?
+                </p>
+            </div>
+        </div>
     </div>
 
     <div class="modal-overlay" id="fieldHelpModal" onclick="if(event.target===this)this.classList.remove('open')">
@@ -569,8 +597,10 @@
 
         const statusEl = document.getElementById('status');
         const statsBar = document.getElementById('statsBar');
-        const loadJobsBtn = document.getElementById('loadJobsBtn');
+        const loadFieldBtn = document.getElementById('loadFieldBtn');
+        const fieldSelect = document.getElementById('fieldSelect');
         const loadAllBtn = document.getElementById('loadAllBtn');
+        const legendEl = document.getElementById('legend');
         const zoomEl = document.getElementById('zoom-level');
 
         function setStatus(msg, isErr) {
@@ -681,6 +711,42 @@
         let buildingsLayer = null;
         let heatmapLayer = null;
 
+        // ─── Color gradient for field values ──────────────────────────────────
+        // Interpolates between blue (low) → green → yellow → red (high)
+        const GRADIENT_STOPS = [
+            [0.0, [58, 83, 155]],   // #3a539b (blue)
+            [0.33, [39, 174, 96]],  // #27ae60 (green)
+            [0.66, [243, 156, 18]], // #f39c12 (yellow)
+            [1.0, [192, 57, 43]],   // #c0392b (red)
+        ];
+
+        function gradientColor(t) {
+            t = Math.max(0, Math.min(1, t));
+            for (let i = 0; i < GRADIENT_STOPS.length - 1; i++) {
+                const [t0, c0] = GRADIENT_STOPS[i];
+                const [t1, c1] = GRADIENT_STOPS[i + 1];
+                if (t >= t0 && t <= t1) {
+                    const f = (t - t0) / (t1 - t0);
+                    const r = Math.round(c0[0] + f * (c1[0] - c0[0]));
+                    const g = Math.round(c0[1] + f * (c1[1] - c0[1]));
+                    const b = Math.round(c0[2] + f * (c1[2] - c0[2]));
+                    return `rgb(${r},${g},${b})`;
+                }
+            }
+            return `rgb(${GRADIENT_STOPS[GRADIENT_STOPS.length - 1][1].join(',')})`;
+        }
+
+        // Current active field mode and its value range
+        let activeField = null;
+        let activeFieldMin = 0;
+        let activeFieldMax = 1;
+
+        function fieldColor(value) {
+            if (activeFieldMax === activeFieldMin) return gradientColor(0.5);
+            const t = (value - activeFieldMin) / (activeFieldMax - activeFieldMin);
+            return gradientColor(t);
+        }
+
         function jobsColor(jobs) {
             if (jobs >= 200) return '#c92a2a';
             if (jobs >= 50) return '#e8590c';
@@ -690,6 +756,18 @@
 
         function buildingStyle(feature) {
             const p = feature.properties || {};
+            // Field mode: color by field_value gradient
+            if (activeField) {
+                if (p.field_value != null) {
+                    const c = fieldColor(p.field_value);
+                    const style = { color: c, weight: 1, fillColor: c, fillOpacity: 0.5 };
+                    if (p.has_user_data) { style.color = '#000'; style.dashArray = '5,4'; style.weight = 2; }
+                    return style;
+                }
+                // In field mode but no value — show as gray
+                return { color: '#888', weight: 0.5, fillColor: '#bbb', fillOpacity: 0.12 };
+            }
+            // Default mode (no active field): use job color buckets
             const jobs = p.effective_jobs || 0;
             if (jobs > 0) {
                 const c = jobsColor(jobs);
@@ -703,18 +781,45 @@
             return { color: '#888', weight: 0.5, fillColor: '#bbb', fillOpacity: 0.12 };
         }
 
+        function showJobsLegend() {
+            legendEl.innerHTML = `
+                <div class="legend-item"><div class="legend-swatch" style="background:#2b8a3e"></div> 1-10</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:#f59f00"></div> 10-50</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:#e8590c"></div> 50-200</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:#c92a2a"></div> 200+</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:transparent;border:2px dashed #000"></div> Korisnički unos</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:#bbb"></div> Bez radnih mjesta</div>
+            `;
+        }
+
+        function updateLegend(field, min, max) {
+            const label = FIELD_LABELS[field] || field;
+            const fmt = (v) => field === 'rent_eur_m2' || field === 'area_m2' ? v.toFixed(1) : Math.round(v);
+            legendEl.innerHTML = `
+                <div class="legend-item"><div class="legend-swatch" style="background:${gradientColor(0)}"></div> ${fmt(min)}</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:${gradientColor(0.33)}"></div> ${fmt(min + (max - min) * 0.33)}</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:${gradientColor(0.66)}"></div> ${fmt(min + (max - min) * 0.66)}</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:${gradientColor(1)}"></div> ${fmt(max)}</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:transparent;border:2px dashed #000"></div> Korisnički unos</div>
+                <div class="legend-item"><div class="legend-swatch" style="background:#bbb"></div> Bez podataka</div>
+            `;
+        }
+
         function updateStats(geojson) {
             const features = geojson.features || [];
-            let totalJobs = 0, withJobs = 0, userCount = 0;
+            const field = activeField || 'jobs';
+            const label = FIELD_LABELS[field] || field;
+            let total = 0, withValue = 0, userCount = 0;
             for (const f of features) {
                 const p = f.properties || {};
-                if (p.effective_jobs > 0) { totalJobs += p.effective_jobs; withJobs++; }
+                const v = p.field_value != null ? p.field_value : (field === 'jobs' ? p.effective_jobs : 0);
+                if (v > 0) { total += v; withValue++; }
                 if (p.has_user_data) userCount++;
             }
             statsBar.innerHTML = `
                 <span><strong>${features.length.toLocaleString()}</strong> zgrada</span>
-                <span><strong>${withJobs.toLocaleString()}</strong> s radnim mjestima</span>
-                <span><strong>${totalJobs.toLocaleString()}</strong> ukupno radnih mjesta</span>
+                <span><strong>${withValue.toLocaleString()}</strong> s podatkom</span>
+                ${field === 'jobs' ? `<span><strong>${total.toLocaleString()}</strong> ukupno radnih mjesta</span>` : ''}
                 ${userCount ? `<span><strong>${userCount}</strong> s korisničkim podacima</span>` : ''}
             `;
         }
@@ -1112,6 +1217,7 @@
                         if (l.feature?.properties?.cadastre_building_id === cadastreId) {
                             l.feature.properties.has_user_data = true;
                             if (field === 'jobs') l.feature.properties.effective_jobs = value;
+                            if (activeField === field) l.feature.properties.field_value = value;
                             l.setStyle(buildingStyle(l.feature));
                         }
                     });
@@ -1128,27 +1234,68 @@
             removeOsmOverlay();
             if (buildingsLayer) { map.removeLayer(buildingsLayer); buildingsLayer = null; }
             if (heatmapLayer) { map.removeLayer(heatmapLayer); heatmapLayer = null; }
+            activeField = null;
             statsBar.innerHTML = '';
+            legendEl.innerHTML = '';
         }
 
-        // ─── Load buildings with jobs (polygons, view-only, no popups) ───────
-        loadJobsBtn.addEventListener('click', async () => {
+        // ─── Load buildings with selected field (polygons or heatmap) ────────
+        loadFieldBtn.addEventListener('click', async () => {
+            const field = fieldSelect.value;
+            const fieldLabel = fieldSelect.options[fieldSelect.selectedIndex].text;
             const b = map.getBounds();
             const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
-            loadJobsBtn.textContent = 'Učitavanje...';
-            loadJobsBtn.disabled = true;
+            loadFieldBtn.textContent = 'Učitavanje...';
+            loadFieldBtn.disabled = true;
+            fieldSelect.disabled = true;
             try {
-                // Fetch heatmap data in parallel with polygon data
                 const zoom = map.getZoom();
                 const showPolygons = zoom >= 15;
 
-                if (showPolygons) {
-                    // At zoom 15+: show polygons for buildings with jobs
-                    const res = await fetch(`${API_BASE}/api/buildings?bbox=${bbox}&jobs_only=1`);
+                const useHeatmap = field === 'jobs' && zoom < 15;
+
+                if (useHeatmap) {
+                    // Jobs heatmap — accumulation makes sense for this field
+                    const res = await fetch(`${API_BASE}/api/buildings/heatmap?bbox=${bbox}&field=jobs`);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const points = await res.json();
+                    clearLayers();
+                    currentMode = 'heatmap';
+
+                    const heatData = points.map(p => [p.lat, p.lng, p.value]);
+                    heatmapLayer = L.heatLayer(heatData, {
+                        radius: 18, blur: 22, maxZoom: 17, max: 200,
+                        gradient: { 0.1: '#2b8a3e', 0.3: '#f59f00', 0.6: '#e8590c', 1.0: '#c92a2a' },
+                    }).addTo(map);
+                    setStatus(`Toplinska karta: ${points.length.toLocaleString()} zgrada s ${fieldLabel}. Zumirajte za detalje.`);
+                } else if (zoom >= 15) {
+                    // Polygon mode — color individual buildings by field value
+                    const res = await fetch(`${API_BASE}/api/buildings?bbox=${bbox}&field=${field}`);
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     const geojson = await res.json();
                     clearLayers();
-                    currentMode = 'jobs';
+                    currentMode = 'field';
+
+                    activeField = field;
+                    // Compute value range using 2nd and 98th percentile to ignore outliers
+                    const vals = geojson.features
+                        .map(f => f.properties.field_value)
+                        .filter(v => v != null)
+                        .sort((a, b) => a - b);
+                    if (vals.length > 0) {
+                        const lo = Math.floor(vals.length * 0.02);
+                        const hi = Math.ceil(vals.length * 0.98) - 1;
+                        activeFieldMin = vals[Math.max(0, lo)];
+                        activeFieldMax = vals[Math.min(vals.length - 1, hi)];
+                        if (activeFieldMin === activeFieldMax) {
+                            activeFieldMin = vals[0];
+                            activeFieldMax = vals[vals.length - 1];
+                        }
+                    } else {
+                        activeFieldMin = 0;
+                        activeFieldMax = 1;
+                    }
+
                     let hoveredLayer = null;
                     buildingsLayer = L.geoJSON(geojson, {
                         style: buildingStyle,
@@ -1172,36 +1319,20 @@
                             });
                         },
                     }).addTo(map);
+                    updateLegend(field, activeFieldMin, activeFieldMax);
                     updateStats(geojson);
-                    setStatus(`Učitano ${geojson.features.length.toLocaleString()} zgrada s radnim mjestima (samo pregled).`);
+                    setStatus(`Učitano ${geojson.features.length.toLocaleString()} zgrada s ${fieldLabel}.`);
                 } else {
-                    // At zoom <15: show heatmap
-                    const res = await fetch(`${API_BASE}/api/buildings/heatmap?bbox=${bbox}`);
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    const points = await res.json();
-                    clearLayers();
-                    currentMode = 'heatmap';
-                    const heatData = points.map(p => [p.lat, p.lng, p.jobs]);
-                    heatmapLayer = L.heatLayer(heatData, {
-                        radius: 18,
-                        blur: 22,
-                        maxZoom: 17,
-                        max: 200,
-                        gradient: {
-                            0.1: '#2b8a3e',
-                            0.3: '#f59f00',
-                            0.6: '#e8590c',
-                            1.0: '#c92a2a',
-                        },
-                    }).addTo(map);
-                    setStatus(`Toplinska karta: ${points.length.toLocaleString()} zgrada s radnim mjestima. Zumirajte za detalje.`);
+                    // Non-jobs field at low zoom — polygons too small to see
+                    setStatus(`Zumirajte na razinu 15+ za prikaz zgrada po polju "${fieldLabel}".`);
                 }
             } catch (e) {
                 console.error(e);
                 setStatus(`Greška pri učitavanju s ${API_BASE}. Je li server pokrenut?`, true);
             } finally {
-                loadJobsBtn.textContent = 'Zgrade s radnim mjestima';
-                loadJobsBtn.disabled = false;
+                loadFieldBtn.textContent = 'Zgrade s';
+                loadFieldBtn.disabled = false;
+                fieldSelect.disabled = false;
             }
         });
 
@@ -1245,6 +1376,7 @@
                     },
                 }).addTo(map);
                 updateStats(geojson);
+                showJobsLegend();
                 setStatus(`Učitano ${geojson.features.length.toLocaleString()} zgrada. Kliknite na zgradu za pregled/uređivanje.`);
             } catch (e) {
                 console.error(e);
