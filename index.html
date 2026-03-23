@@ -289,6 +289,7 @@
                 <button id="loadFieldBtn" class="primary">Zgrade s</button>
                 <select id="fieldSelect" style="padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:13px;">
                     <option value="jobs" selected>radnim mjestima</option>
+                    <option value="residents">stanovnicima</option>
                     <option value="height_m">visinom</option>
                     <option value="floors">katovima</option>
                     <option value="area_m2">površinom</option>
@@ -305,7 +306,7 @@
             </a>
         </header>
         <div id="map"></div>
-        <div class="status"><span id="status">Pomjerite kartu na područje interesa. "Zgrade s radnim mjestima" za pregled, ili zumirajte na 17+ i "Sve zgrade" za uređivanje.</span><span id="zoom-level" style="float:right;color:#888"></span></div>
+        <div class="status"><span id="status">Pomjerite kartu na područje interesa. Odaberite polje i "Zgrade s" za pregled, ili zumirajte na 17+ i "Sve zgrade" za uređivanje.</span><span id="zoom-level" style="float:right;color:#888"></span></div>
     </div>
 
     <div class="modal-overlay" id="aboutModal" onclick="if(event.target===this)this.classList.remove('open')">
@@ -351,7 +352,7 @@
     <div class="modal-overlay" id="classModal" onclick="if(event.target===this)this.classList.remove('open')">
         <div class="modal">
             <div class="modal-header">
-                <h2>Klasifikacija zgrada i procjena radnih mjesta</h2>
+                <h2>Klasifikacija zgrada i procjena radnih mjesta / stanovnika</h2>
                 <button onclick="document.getElementById('classModal').classList.remove('open')">&times;</button>
             </div>
             <div class="modal-body" id="classModalBody"></div>
@@ -563,14 +564,34 @@
                 Sve ostale šifre (stambene, pomoćne, ruševine itd.) klasificirane su kao <strong>none</strong> — bez procjene radnih mjesta.
                 Zadani broj katova po kategoriji ako nema podataka o visini: ured 4, mješovito 5, industrija 1, logistika 1, ugostiteljstvo 4, obrazovanje 2, zdravstvo 4, uprava 3, trgovina 1.
             </p>`;
+
+            html += `<h3 style="margin-top:16px;font-size:14px;">Procjena stanovnika</h3>`;
+            html += `<p>
+                Stanovnici se procjenjuju kao: <strong>tlocrt × (katovi × stambeni udio) / gustoća</strong>.<br>
+                Gustoća = bruto m² po stanovniku. Prosječna veličina stana po osobi u Zagrebu: ~25-35 m².
+            </p>`;
+            html += `<table class="cls-table">
+                <thead><tr>
+                    <th>Šifra</th><th>Vrsta</th><th>Kategorija</th>
+                    <th>Stambeni udio</th><th>Gustoća (m²/stanovnik)</th>
+                </tr></thead><tbody>
+                <tr><td>101</td><td>STAMBENA ZGRADA</td><td class="cat">apartment</td><td>85%</td><td>30</td></tr>
+                <tr><td>102</td><td>OBITELJSKA KUĆA</td><td class="cat">family_house</td><td>90%</td><td>35</td></tr>
+                <tr><td>103</td><td>ZGRADA MJEŠOVITE UPORABE</td><td class="cat">mixed_residential</td><td>60%</td><td>30</td></tr>
+                <tr><td>100</td><td>ZGRADA (&lt;1000 m²)</td><td class="cat">apartment</td><td>85%</td><td>30</td></tr>
+            </tbody></table>`;
+            html += `<p style="margin-top:10px">
+                Zadani broj katova ako nema podataka o visini: stambena zgrada 4, obiteljska kuća 2, mješovito 5.
+            </p>`;
+
             body.innerHTML = html;
         })();
 
-        const DISPLAY_FIELDS = ['id', 'area_m2', 'height_m', 'floors', 'year_built', 'jobs', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'building_type_desc', 'building_subtype', 'building_class', 'history_url'];
-        const KNOWN_FIELDS = ['area_m2', 'height_m', 'floors', 'year_built', 'jobs', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'history_url'];
+        const DISPLAY_FIELDS = ['id', 'area_m2', 'height_m', 'floors', 'year_built', 'jobs', 'residents', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'building_type_desc', 'building_subtype', 'building_class', 'history_url'];
+        const KNOWN_FIELDS = ['area_m2', 'height_m', 'floors', 'year_built', 'jobs', 'residents', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'history_url'];
         const FIELD_LABELS = {
             id: 'ID', area_m2: 'Površina (m\u00B2)', height_m: 'Visina (m)', floors: 'Katovi',
-            jobs: 'Radna mjesta', pupils: 'Učenici', visitors: 'Posjetitelji', rent_eur_m2: 'Najam (\u20AC/m\u00B2)',
+            jobs: 'Radna mjesta', residents: 'Stanovnici', pupils: 'Učenici', visitors: 'Posjetitelji', rent_eur_m2: 'Najam (\u20AC/m\u00B2)',
             building_type: 'Šifra vrste', building_type_desc: 'Opis vrste',
             year_built: 'Godina izgradnje', history_url: 'Povijest zgrade',
             building_subtype: 'Vrsta', building_class: 'Klasa',
@@ -820,6 +841,7 @@
                 <span><strong>${features.length.toLocaleString()}</strong> zgrada</span>
                 <span><strong>${withValue.toLocaleString()}</strong> s podatkom</span>
                 ${field === 'jobs' ? `<span><strong>${total.toLocaleString()}</strong> ukupno radnih mjesta</span>` : ''}
+                ${field === 'residents' ? `<span><strong>${total.toLocaleString()}</strong> ukupno stanovnika (procjena)</span>` : ''}
                 ${userCount ? `<span><strong>${userCount}</strong> s korisničkim podacima</span>` : ''}
             `;
         }
@@ -863,14 +885,15 @@
                 if (!arr || arr.length === 0) continue;
                 for (const c of arr) {
                     if (sourceFilter && c.source !== sourceFilter) continue;
-                    const urlHtml = c.source_url
+                    const urlHtml = field === 'history_url' ? ''
+                        : c.source_url
                         ? `<a class="url-link" href="${escapeHtml(c.source_url)}" target="_blank" rel="noopener">[src]</a>`
                         : c.url
                         ? `<a class="url-link" href="${escapeHtml(c.url)}" target="_blank" rel="noopener">[link]</a>`
                         : '';
                     let displayValue;
                     if (field === 'history_url' && c.text) {
-                        displayValue = `<a href="${escapeHtml(c.text)}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(c.text)}</a>`;
+                        displayValue = `<a href="${escapeHtml(c.text)}" target="_blank" rel="noopener">(link)</a>`;
                     } else if (c.text) {
                         displayValue = escapeHtml(c.text);
                     } else if (field === 'area_m2' || field === 'height_m') {
@@ -1252,20 +1275,23 @@
                 const zoom = map.getZoom();
                 const showPolygons = zoom >= 15;
 
-                const useHeatmap = field === 'jobs' && zoom < 15;
+                const useHeatmap = (field === 'jobs' || field === 'residents') && zoom < 15;
 
                 if (useHeatmap) {
-                    // Jobs heatmap — accumulation makes sense for this field
-                    const res = await fetch(`${API_BASE}/api/buildings/heatmap?bbox=${bbox}&field=jobs`);
+                    // Heatmap — accumulation makes sense for jobs and residents
+                    const res = await fetch(`${API_BASE}/api/buildings/heatmap?bbox=${bbox}&field=${field}`);
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     const points = await res.json();
                     clearLayers();
                     currentMode = 'heatmap';
 
                     const heatData = points.map(p => [p.lat, p.lng, p.value]);
+                    const heatGradient = field === 'residents'
+                        ? { 0.1: '#4dabf7', 0.3: '#3b5bdb', 0.6: '#7048e8', 1.0: '#c2255c' }
+                        : { 0.1: '#2b8a3e', 0.3: '#f59f00', 0.6: '#e8590c', 1.0: '#c92a2a' };
                     heatmapLayer = L.heatLayer(heatData, {
-                        radius: 18, blur: 22, maxZoom: 17, max: 200,
-                        gradient: { 0.1: '#2b8a3e', 0.3: '#f59f00', 0.6: '#e8590c', 1.0: '#c92a2a' },
+                        radius: 18, blur: 22, maxZoom: 17, max: field === 'residents' ? 300 : 200,
+                        gradient: heatGradient,
                     }).addTo(map);
                     setStatus(`Toplinska karta: ${points.length.toLocaleString()} zgrada s ${fieldLabel}. Zumirajte za detalje.`);
                 } else if (zoom >= 15) {
