@@ -1,6 +1,14 @@
 #!/bin/bash
 set -e
 
+# Guard: deployment pulls from git, so uncommitted changes won't be deployed
+if ! git diff --quiet HEAD 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    echo "ERROR: You have uncommitted changes. These will NOT be deployed (deploy pulls from git)."
+    echo "Commit and push first, then deploy."
+    git status --short
+    exit 1
+fi
+
 SERVER_USER="${DEPLOY_USER:-root}"
 SERVER_HOST="${DEPLOY_HOST:-67.205.138.129}"
 SSH_KEY="${DEPLOY_SSH_KEY:-~/.ssh/id_ed25519}"

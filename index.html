@@ -720,8 +720,10 @@
                 }
             },
             onRemove: function (map) {
-                // Clean up mobile bottom sheet from body
+                // Clean up mobile bottom sheet: remove class so next _updatePosition
+                // re-appends to document.body (position:fixed breaks inside map pane transforms)
                 if (this._container && this._container.classList.contains('mobile-bottom-sheet')) {
+                    this._container.classList.remove('mobile-bottom-sheet');
                     this._container.remove();
                 }
                 L.Popup.prototype.onRemove.call(this, map);
@@ -1167,12 +1169,14 @@
                 history.pushState({}, '', `${basePath}${window.location.search}`);
             });
 
+            setStatus(`Učitavanje zgrade ${cadastreId}...`);
             try {
                 const res = await fetch(`${API_BASE}/api/building/${cadastreId}`);
                 if (!res.ok) throw new Error('Not found');
                 currentDetail = await res.json();
                 osmLoadState = 'loading';
                 popup.setContent(buildPopupHtml(currentDetail, null));
+                setStatus(`Zgrada ${cadastreId} učitana.`);
 
                 setTimeout(() => {
                     if (!popup._map) return;
