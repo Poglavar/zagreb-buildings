@@ -1,1 +1,1 @@
-Unless overriden here, follow instructions from /Users/simun/Code/AGENTS.md
+Unless overridden here, follow instructions from /Users/simun/Code/agents/AGENTS.md
