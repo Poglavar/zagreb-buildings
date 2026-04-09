@@ -1507,7 +1507,10 @@
             if (id) {
                 // Small delay to ensure map is fully initialized
                 setTimeout(() => openBuildingByDeepLink(id), 200);
+                return;
             }
+            // Auto-load default view: "Zgrade s radnim mjestima" (jobs is preselected)
+            map.whenReady(() => loadFieldBtn.click());
         })();
     </script>
 </body>
