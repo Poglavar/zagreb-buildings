@@ -146,7 +146,15 @@
         .source-tag.meta_lidar { background: #e5dbff; color: #7048e8; }
         .source-tag.microsoft { background: #c3fae8; color: #0ca678; }
         .source-tag.google { background: #fcc2d7; color: #c2255c; }
+        .source-tag.ai { background: #e5dbff; color: #5f3dc4; }
+        .source-tag.heritage { background: #c3fae8; color: #087f5b; }
+        .source-tag.user_correction { background: #ffe3e3; color: #c92a2a; }
         .source-tag { background: #e9ecef; color: #495057; }
+        .ai-detail { margin-top: 4px; font-size: 11px; color: #666; }
+        .ai-detail summary { cursor: pointer; color: #5f3dc4; font-weight: 500; user-select: none; }
+        .ai-detail-body { margin-top: 4px; padding: 6px 8px; background: #f8f4ff; border-radius: 4px; line-height: 1.5; }
+        .ai-detail-body .ai-cues { margin: 4px 0 0; padding-left: 16px; }
+        .ai-detail-body .ai-meta { color: #888; font-size: 10px; margin-top: 4px; }
         .derived-tag {
             display: inline-block; padding: 1px 5px; border-radius: 3px;
             font-size: 10px; font-weight: 600; font-style: italic;
@@ -870,6 +878,9 @@
             if (source === 'meta_lidar') return 'meta_lidar';
             if (source === 'microsoft') return 'microsoft';
             if (source === 'google') return 'google';
+            if (source.startsWith('ai:')) return 'ai';
+            if (source.startsWith('heritage:')) return 'heritage';
+            if (source.startsWith('user:correction')) return 'user_correction';
             return '';
         }
 
@@ -918,11 +929,33 @@
                     }
                     const derivedTooltip = c.derived_tooltip || 'Izvedena vrijednost';
                     const derivedHtml = c.derived ? `<span class="derived-tag" title="${escapeHtml(derivedTooltip)}">derived</span>` : '';
+
+                    // For AI year_built claims, append expandable reasoning below the row
+                    let aiDetailHtml = '';
+                    if (field === 'year_built' && c.source && c.source.startsWith('ai:') && (c.ai_reasoning || c.ai_cues || c.ai_style)) {
+                        const rangePart = (c.ai_year_low && c.ai_year_high && c.ai_year_low !== c.ai_year_high)
+                            ? `${c.ai_year_low}–${c.ai_year_high}` : '';
+                        const confPct = c.ai_confidence != null ? `${Math.round(c.ai_confidence * 100)}%` : '';
+                        const metaParts = [c.ai_style, rangePart, confPct ? `pouzdanost ${confPct}` : ''].filter(Boolean);
+                        let cuesHtml = '';
+                        if (c.ai_cues && Array.isArray(c.ai_cues) && c.ai_cues.length) {
+                            cuesHtml = `<ul class="ai-cues">${c.ai_cues.map(q => `<li>${escapeHtml(String(q))}</li>`).join('')}</ul>`;
+                        }
+                        aiDetailHtml = `<tr><td colspan="3" style="padding:0 8px 6px;"><details class="ai-detail">
+                            <summary>AI analiza</summary>
+                            <div class="ai-detail-body">
+                                ${c.ai_reasoning ? `<div>${escapeHtml(c.ai_reasoning)}</div>` : ''}
+                                ${cuesHtml}
+                                ${metaParts.length ? `<div class="ai-meta">${escapeHtml(metaParts.join(' · '))}</div>` : ''}
+                            </div>
+                        </details></td></tr>`;
+                    }
+
                     claimsHtml += `<tr>
                         <td class="field-name">${FIELD_LABELS[field]}</td>
                         <td class="value">${displayValue}</td>
                         <td>${derivedHtml}<span class="source-tag ${sourceTagClass(c.source)}">${escapeHtml(c.source)}</span>${urlHtml}</td>
-                    </tr>`;
+                    </tr>${aiDetailHtml}`;
                 }
             }
             if (!claimsHtml) {

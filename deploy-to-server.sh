@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Load Cloudflare credentials (CF_ZONE_ID, CF_API_KEY)
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a; source "$SCRIPT_DIR/.env"; set +a
+fi
+
 # Guard: deployment pulls from git, so uncommitted changes won't be deployed
 if ! git diff --quiet HEAD 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard)" ]; then
     echo "ERROR: You have uncommitted changes. These will NOT be deployed (deploy pulls from git)."
@@ -44,6 +51,18 @@ ${SSH_CMD} "
     pm2 start ecosystem.config.js
     pm2 save
 "
+
+echo "Purging Cloudflare cache..."
+result=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+    -H "Authorization: Bearer ${CF_API_KEY}" \
+    -H "Content-Type: application/json" \
+    --data '{"purge_everything":true}')
+if echo "$result" | python3 -c "import sys,json; r=json.load(sys.stdin); sys.exit(0 if r['success'] else 1)" 2>/dev/null; then
+    echo "Cache purged OK."
+else
+    echo "Cache purge failed: $result"
+    exit 1
+fi
 
 echo "=== Deployment complete ==="
 echo "Frontend: https://zagreb.lol/zgrade"
