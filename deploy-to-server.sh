@@ -37,9 +37,11 @@ ${SSH_CMD} "
 # 2. Copy viewer.html to web root
 echo "Deploying frontend..."
 ${SSH_CMD} "
-    mkdir -p /var/www/zagreb.lol/zgrade
+    mkdir -p /var/www/zagreb.lol/zgrade/js
     cp ${REPO_PATH}/index.html /var/www/zagreb.lol/zgrade/index.html
     cp ${REPO_PATH}/favicon.svg /var/www/zagreb.lol/zgrade/favicon.svg
+    # js/ holds the lazily-imported 3D compare viewer; without it the 3D button 404s.
+    cp ${REPO_PATH}/js/*.js /var/www/zagreb.lol/zgrade/js/
 "
 
 # 3. Start/restart PM2 export cron (API is served by cadastre-data/api)

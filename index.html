@@ -21,6 +21,11 @@
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+    <!-- three.js is only pulled when the 3D compare dialog is first opened (js/building-3d.js).
+         Same version the other zagreb.lol 3D viewers pin. -->
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.184.0/build/three.module.js" } }
+    </script>
     <style>
         * { box-sizing: border-box; }
         html, body { height: 100%; margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
@@ -42,6 +47,18 @@
         header button.primary { background: #228be6; color: #fff; border-color: #228be6; }
         header button.primary:hover { background: #1c7ed6; }
 
+        /* The two view modes are mutually exclusive states, not actions — a segmented switch
+           says that, where two separate buttons read as "do this" / "do that". */
+        .mode-switch { display: inline-flex; }
+        header .mode-btn { border-radius: 0; margin: 0; }
+        header .mode-btn:first-child { border-radius: 4px 0 0 4px; }
+        header .mode-btn:last-child { border-radius: 0 4px 4px 0; border-left-width: 0; }
+        header .mode-btn.active {
+            background: #228be6; color: #fff; border-color: #228be6;
+        }
+        header .mode-btn.active:hover { background: #1c7ed6; }
+        header .mode-btn.active + .mode-btn { border-left: 1px solid #228be6; }
+
         .legend { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #555; margin-left: auto; }
         .legend-item { display: flex; align-items: center; gap: 3px; }
         .legend-swatch { width: 14px; height: 14px; border-radius: 2px; border: 1px solid rgba(0,0,0,0.15); }
@@ -55,46 +72,42 @@
         }
         .status.err { color: #c92a2a; }
 
-        /* ─── Popup (opens to the right of the building) ────── */
+        /* ─── Building panel ──────────────────────────────────────────────────
+           Still a Leaflet popup underneath (so opening, closing and the deep-link flow are
+           unchanged), but pinned as a full-height panel on the right instead of a bubble that
+           floats beside the building. Fixed geometry is the point: the panel can no longer move
+           or resize when its contents change, which is what used to shuffle the tabs around. */
         .leaflet-popup-pane { z-index: 2000 !important; }
         .leaflet-popup { z-index: 2000 !important; }
-        .leaflet-popup-content-wrapper { border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-        .leaflet-popup-content { margin: 0; width: 460px !important; }
-
-        /* Tip points left toward the building */
-        .popup-right .leaflet-popup-tip-container {
-            position: absolute;
-            left: 1px; top: 50%;
-            width: 16px; height: 16px;
-            margin: -8px 0 0 -8px;
-            overflow: hidden;
+        .leaflet-popup.popup-right {
+            position: fixed !important;
+            top: var(--panel-top, 48px); right: 0; bottom: 0;
+            left: auto !important;
+            width: var(--panel-width, 520px);
+            margin: 0 !important;
+            transform: none !important;
         }
-        .popup-right .leaflet-popup-tip {
-            width: 12px; height: 12px;
-            margin: 2px 0 0 4px;
-            transform: rotate(45deg);
-            background: #fff;
-            box-shadow: -2px 2px 4px rgba(0,0,0,0.1);
+        .popup-right .leaflet-popup-content-wrapper {
+            height: 100%; border-radius: 0;
+            display: flex; flex-direction: column;
+            box-shadow: -6px 0 24px rgba(0,0,0,0.14);
         }
-        /* Leaflet default close button — adjust for our layout */
+        .popup-right .leaflet-popup-content {
+            margin: 0; width: 100% !important;
+            flex: 1; min-height: 0; display: flex;
+        }
+        /* A panel anchored to the window edge has nothing to point at. */
+        .popup-right .leaflet-popup-tip-container { display: none; }
         .popup-right .leaflet-popup-close-button { z-index: 10; }
 
-        .bld-popup { font-size: 13px; }
+        .bld-popup { font-size: 13px; display: flex; flex-direction: column; flex: 1; min-height: 0; }
         .bld-popup-header {
             padding: 12px 16px; border-bottom: 1px solid #e9ecef;
-            background: #f8f9fa; border-radius: 8px 8px 0 0;
+            background: #f8f9fa; flex: none;
         }
+        /* Collapse control — the bottom sheet on mobile folds down to just this header. */
+        .sheet-toggle { display: none; }
         .bld-popup-header h3 { margin: 0 0 4px; font-size: 14px; line-height: 1.3; display: flex; align-items: center; gap: 6px; }
-        .bld-popup-header .ids { font-size: 11px; color: #868e96; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
-        .outline-toggle {
-            display: inline-flex; align-items: center; gap: 3px;
-            font-size: 11px; cursor: pointer; user-select: none;
-        }
-        .outline-toggle input { margin: 0; cursor: pointer; accent-color: #228be6; }
-        .outline-toggle input:disabled { cursor: default; }
-        .outline-label { font-weight: 500; }
-        .outline-label.cadastre { color: #1864ab; }
-        .outline-label.osm { color: #2b8a3e; }
         .street-view-link {
             font-size: 11px; color: #868e96; font-weight: 400;
             text-decoration: none; white-space: nowrap;
@@ -109,20 +122,60 @@
         .share-link:hover { color: #228be6; }
 
         .bld-popup-body {
-            padding: 10px 16px;
-            max-height: 350px;
-            overflow-y: auto;
+            padding: 10px 16px; flex: 1; min-height: 0;
+            display: flex; flex-direction: column;
         }
+        /* Only the rows scroll; the tabs and the Izvor line stay put. The panel's height is
+           fixed by the viewport, so the list simply takes whatever is left — no measuring. */
+        .claims-scroll { overflow-y: auto; flex: 1; min-height: 0; }
 
-        .source-filter {
-            display: flex; align-items: center; gap: 6px;
-            margin-bottom: 8px; font-size: 12px;
+        .source-info {
+            display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px;
+            font-size: 11px; color: #868e96; margin-bottom: 8px; line-height: 1.6;
         }
-        .source-filter label { font-weight: 600; color: #495057; white-space: nowrap; }
-        .source-filter select {
-            flex: 1; padding: 3px 6px; font-size: 12px;
-            border: 1px solid #ccc; border-radius: 3px;
+        .source-info .src-key { font-weight: 600; color: #495057; }
+        .source-info a { color: #1c7ed6; text-decoration: none; }
+        .source-info a:hover { text-decoration: underline; }
+        .source-info .src-level { color: #adb5bd; }
+        .source-info .src-note { color: #adb5bd; font-style: italic; }
+        .source-info .src-sep { color: #dee2e6; }
+
+        .source-tabs {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+            margin-bottom: 8px; border-bottom: 1px solid #e9ecef; padding-bottom: 6px;
         }
+        /* A tab is a pill holding an optional footprint checkbox and the filter button. The
+           checkbox draws that source's outline on the map; the button filters the table. */
+        .source-tab {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 9px; font-size: 12px; font-weight: 600; line-height: 1.5;
+            border: 1px solid #dee2e6; border-radius: 999px; background: #fff;
+            color: #495057; white-space: nowrap;
+        }
+        .source-tab:hover { background: #f8f9fa; }
+        .source-tab .tab-btn {
+            background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+            font: inherit; color: inherit;
+        }
+        .source-tab .tab-fp { margin: 0; cursor: pointer; accent-color: #495057; }
+        .source-tab .count { font-weight: 500; color: #adb5bd; margin-left: 3px; }
+        .source-tab.active { background: #495057; border-color: #495057; color: #fff; }
+        .source-tab.active:hover { background: #495057; }
+        .source-tab.active .count { color: #ced4da; }
+        .source-tab.active .tab-fp { accent-color: #fff; }
+        /* Tab accents match the source-tag colours, so a tab and its rows read as one thing. */
+        .source-tab.cadastre .tab-fp { accent-color: #1864ab; }
+        .source-tab.gdi      .tab-fp { accent-color: #d9480f; }
+        .source-tab.overture .tab-fp { accent-color: #2b8a3e; }
+        .source-tab.cadastre.active { background: #1864ab; border-color: #1864ab; }
+        .source-tab.gdi.active      { background: #d9480f; border-color: #d9480f; }
+        .source-tab.overture.active { background: #2b8a3e; border-color: #2b8a3e; }
+        .source-tab.gup.active      { background: #6741d9; border-color: #6741d9; }
+        .source-tab.gup.active:hover { background: #6741d9; }
+        .source-tab.cadastre.active:hover { background: #1864ab; }
+        .source-tab.gdi.active:hover      { background: #d9480f; }
+        .source-tab.overture.active:hover { background: #2b8a3e; }
+        .source-tab.active .tab-fp { accent-color: #fff; }
 
         .claims-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         .claims-table th {
@@ -142,7 +195,10 @@
         .source-tag.cadastre { background: #d0ebff; color: #1864ab; }
         .source-tag.osm { background: #d3f9d8; color: #2b8a3e; }
         .source-tag.auto_estimate { background: #fff3bf; color: #e67700; }
-        .source-tag.three_d_survey { background: #ffe8cc; color: #d9480f; }
+        .source-tag.gdi { background: #ffe8cc; color: #d9480f; }
+        .source-tag.gup { background: #e5dbff; color: #6741d9; }
+        .source-tag.gup-2016 { background: #dee2e6; color: #495057; }   /* superseded plan — muted */
+        .source-tag.gup-2025 { background: #d0bfff; color: #5f3dc4; }   /* plan in force — accent */
         .source-tag.meta_lidar { background: #e5dbff; color: #7048e8; }
         .source-tag.microsoft { background: #c3fae8; color: #0ca678; }
         .source-tag.google { background: #fcc2d7; color: #c2255c; }
@@ -159,6 +215,72 @@
             display: inline-block; padding: 1px 5px; border-radius: 3px;
             font-size: 10px; font-weight: 600; font-style: italic;
             background: #f3f0ff; color: #7048e8; margin-right: 3px;
+        }
+        /* GDI models a whole terraced row as one object; its area/volume then describe the
+           whole block, not this building. The badge says how many buildings share it. */
+        .shared-tag {
+            display: inline-block; padding: 1px 5px; border-radius: 3px;
+            font-size: 10px; font-weight: 600;
+            background: #ffe8cc; color: #d9480f; margin-right: 3px; cursor: help;
+        }
+
+        /* The selected building has to win against a choropleth, an orange GDI outline and a
+           green Overture one — a colour swap alone disappears in that. This pulses the stroke
+           and its glow, which nothing else on the map does. */
+        @keyframes buildingPulse {
+            0%, 100% { stroke-width: 3; stroke-opacity: 1;   filter: drop-shadow(0 0 2px rgba(24,100,171,0.85)); }
+            50%      { stroke-width: 6; stroke-opacity: 0.6; filter: drop-shadow(0 0 9px rgba(24,100,171,1)); }
+        }
+        path.selected-building {
+            animation: buildingPulse 1.9s ease-in-out infinite;
+            stroke-linejoin: round;
+        }
+        /* Motion is decoration here; the emphasis must survive without it. */
+        @media (prefers-reduced-motion: reduce) {
+            path.selected-building {
+                animation: none;
+                stroke-width: 4;
+                filter: drop-shadow(0 0 5px rgba(24,100,171,0.9));
+            }
+        }
+
+        /* 3D compare dialog */
+        .btn-3d {
+            background: #fff; border: 1px solid #dee2e6; border-radius: 4px;
+            font-size: 11px; font-weight: 600; color: #d9480f;
+            padding: 1px 6px; cursor: pointer; vertical-align: middle;
+        }
+        .btn-3d:hover { background: #fff4e6; }
+        .modal.modal-3d { max-width: 860px; height: 80vh; }
+        .modal-3d .modal-body { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; padding: 10px 12px; }
+        .m3d-stage { position: relative; flex: 1; min-height: 0; border-radius: 6px; overflow: hidden; background: #f1f3f5; }
+        .m3d-stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+        .m3d-stage canvas:active { cursor: grabbing; }
+        /* One source per row, so the three are read as a list and their toggles line up. */
+        .m3d-legend { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+        .m3d-model {
+            display: flex; align-items: center; gap: 6px; padding: 4px 8px;
+            border: 1px solid #e9ecef; border-radius: 5px; background: #fff;
+        }
+        .m3d-model .name { min-width: 120px; }
+        .m3d-model .note { flex: 1; }
+        .m3d-model label { white-space: nowrap; }
+        .m3d-spin {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 12px; font-weight: 500; color: #495057; cursor: pointer; user-select: none;
+        }
+        .modal-3d .modal-header h2 { flex: 1; }
+        .modal-3d .modal-header { gap: 12px; }
+        .m3d-model .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+        .m3d-model label { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; user-select: none; }
+        .m3d-model .name { font-weight: 600; }
+        .m3d-model .note { color: #868e96; font-size: 11px; }
+        .m3d-missing { color: #868e96; font-size: 11px; }
+        .m3d-hint { color: #868e96; font-size: 11px; }
+        @media (max-width: 600px) {
+            .modal.modal-3d { height: 85vh; }
+            .m3d-legend { gap: 6px; }
+            .m3d-model { padding: 3px 6px; font-size: 11px; }
         }
 
         .url-link { color: #228be6; text-decoration: none; font-size: 11px; margin-left: 4px; }
@@ -242,19 +364,24 @@
             .legend { display: none; }
             .stats-bar { font-size: 11px; gap: 8px; }
 
+            /* Bottom sheet: lower half of the screen, collapsible down to its header. */
+            .leaflet-popup.popup-right,
             .mobile-bottom-sheet {
                 position: fixed !important;
                 left: 0 !important; right: 0 !important;
-                top: 50% !important; bottom: auto !important;
-                transform: translateY(-50%) !important;
+                top: auto !important; bottom: 0 !important;
+                transform: none !important;
                 z-index: 2000 !important;
                 width: 100% !important;
+                height: 55vh;
+                transition: height 0.18s ease;
             }
+            .leaflet-popup.popup-right.sheet-collapsed { height: 46px; }
             .mobile-bottom-sheet .leaflet-popup-content-wrapper {
-                border-radius: 12px;
-                background: rgba(255,255,255,0.82);
+                border-radius: 12px 12px 0 0;
+                background: rgba(255,255,255,0.94);
                 backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-                box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+                box-shadow: 0 -4px 24px rgba(0,0,0,0.2);
             }
             .mobile-bottom-sheet .leaflet-popup-content { width: 100% !important; margin: 0 !important; }
             .mobile-bottom-sheet .leaflet-popup-tip-container { display: none; }
@@ -263,12 +390,21 @@
                 z-index: 10; top: 8px !important; right: 10px !important;
                 font-size: 22px; color: #495057;
             }
-            .bld-popup-body { max-height: 30vh !important; }
+            /* Collapsed, only the title row shows — everything under it is clipped away. */
+            .sheet-collapsed .bld-popup-body,
+            .sheet-collapsed .bld-popup-footer,
+            .sheet-collapsed .bld-popup-header .ids { display: none; }
+            .sheet-collapsed .bld-popup-header { border-bottom: none; padding: 8px 12px; }
+            .sheet-toggle {
+                display: inline-flex; align-items: center; justify-content: center;
+                background: none; border: none; cursor: pointer; color: #868e96;
+                font-size: 14px; padding: 0 4px; margin-left: auto;
+            }
 
             .bld-popup { font-size: 12px; }
             .bld-popup-header { padding: 10px 12px; }
             .bld-popup-header h3 { font-size: 13px; flex-wrap: wrap; }
-            .bld-popup-body { padding: 8px 12px; max-height: 40vh; }
+            .bld-popup-body { padding: 8px 12px; }
             .bld-popup-footer { padding: 8px 12px; }
             .add-claim .row { flex-direction: column; gap: 4px; }
             .add-claim .row > * { flex: none; width: 100%; }
@@ -306,19 +442,19 @@
                 </svg>
             </a>
             <h1 style="display:flex;align-items:center;gap:6px;">Zgrade Zagreba <button onclick="document.getElementById('aboutModal').classList.add('open')" style="background:none;border:1px solid #ccc;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:1;cursor:pointer;padding:0;color:#868e96;display:inline-flex;align-items:center;justify-content:center;" title="O stranici">i</button></h1>
-            <span style="display:inline-flex;align-items:center;gap:4px;">
-                <button id="loadFieldBtn" class="primary">Zgrade s</button>
-                <select id="fieldSelect" style="padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:13px;">
-                    <option value="jobs" selected>radnim mjestima</option>
-                    <option value="residents">stanovnicima</option>
-                    <option value="height_m">visinom</option>
-                    <option value="floors">katovima</option>
-                    <option value="area_m2">površinom</option>
-                    <option value="year_built">godinom izgradnje</option>
-                    <option value="rent_eur_m2">najmom</option>
-                </select>
+            <span class="mode-switch" role="group" aria-label="Način prikaza">
+                <button id="modeFieldBtn" class="mode-btn active" aria-pressed="true">Boja po polju</button>
+                <button id="modeAllBtn" class="mode-btn" aria-pressed="false">Sve zgrade</button>
             </span>
-            <button id="loadAllBtn" class="secondary" title="Zumirajte na razinu 17+ za aktivaciju">Sve zgrade</button>
+            <select id="fieldSelect" style="padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:13px;">
+                <option value="jobs" selected>radnim mjestima</option>
+                <option value="residents">stanovnicima</option>
+                <option value="height_m">visinom</option>
+                <option value="floors">katovima</option>
+                <option value="area_m2">površinom</option>
+                <option value="year_built">godinom izgradnje</option>
+                <option value="rent_eur_m2">najmom</option>
+            </select>
             <div class="stats-bar" id="statsBar"></div>
             <div class="legend" id="legend"></div>
             <button onclick="document.getElementById('classModal').classList.add('open')">Klasifikacija</button>
@@ -377,6 +513,22 @@
                 <button onclick="document.getElementById('classModal').classList.remove('open')">&times;</button>
             </div>
             <div class="modal-body" id="classModalBody"></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="model3dModal" onclick="if(event.target===this)window.closeBuilding3d()">
+        <div class="modal modal-3d">
+            <div class="modal-header">
+                <h2 id="model3dTitle">3D usporedba izvora</h2>
+                <label class="m3d-spin" id="model3dParcelsWrap"><input type="checkbox" id="model3dParcels" checked> čestice</label>
+                <label class="m3d-spin"><input type="checkbox" id="model3dSpin" checked> rotacija</label>
+                <button onclick="window.closeBuilding3d()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="m3d-legend" id="model3dLegend"></div>
+                <div class="m3d-stage"><canvas id="model3dCanvas"></canvas></div>
+                <div class="m3d-hint" id="model3dHint">Povuci za rotaciju, kotačić za zumiranje.</div>
+            </div>
         </div>
     </div>
 
@@ -455,6 +607,7 @@
                     area_m2: area,
                     polygon: data.polygon,
                     sources: data.sources || {},
+                    source_link: data.source_link || null,
                 };
             } catch (e) {
                 if (e.name === 'AbortError') return null;
@@ -474,6 +627,10 @@
             detail.osm_id = overtureData.osm_id;
             detail.osm_name = overtureData.name;
             detail.overture_polygon = overtureData.polygon;
+            // Provenance for the Overture tab comes from the call that knows the osm_id.
+            if (overtureData.source_link) {
+                detail.source_links = { ...(detail.source_links || {}), overture: overtureData.source_link };
+            }
             const claims = detail.claims || {};
             const src = overtureData.sources || {};
 
@@ -608,7 +765,7 @@
             body.innerHTML = html;
         })();
 
-        const DISPLAY_FIELDS = ['id', 'area_m2', 'height_m', 'floors', 'year_built', 'jobs', 'residents', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'building_type_desc', 'building_subtype', 'building_class', 'history_url'];
+        const DISPLAY_FIELDS = ['id', 'area_m2', 'height_m', 'floors', 'volume_m3', 'year_built', 'jobs', 'residents', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'building_type_desc', 'building_use', 'building_subtype', 'building_class', 'survey', 'zone', 'buildable', 'gbp_max_m2', 'floors_max', 'height_max_m', 'units_max', 'history_url'];
         const KNOWN_FIELDS = ['area_m2', 'height_m', 'floors', 'year_built', 'jobs', 'residents', 'pupils', 'visitors', 'rent_eur_m2', 'building_type', 'history_url'];
         const FIELD_LABELS = {
             id: 'ID', area_m2: 'Površina (m\u00B2)', height_m: 'Visina (m)', floors: 'Katovi',
@@ -616,8 +773,114 @@
             building_type: 'Šifra vrste', building_type_desc: 'Opis vrste',
             year_built: 'Godina izgradnje', history_url: 'Povijest zgrade',
             building_subtype: 'Vrsta', building_class: 'Klasa',
+            volume_m3: 'Volumen (m³)', building_use: 'Namjena', survey: 'Izmjera',
+            zone: 'Namjena po planu', buildable: 'Gradnja', gbp_max_m2: 'Maks. GBP (m²)',
+            floors_max: 'Maks. etaža', height_max_m: 'Maks. visina (m)', units_max: 'Maks. stanova',
         };
-        const SYSTEM_SOURCES = new Set(['cadastre', '3d_survey', 'auto_estimate', 'osm', 'meta_lidar', 'microsoft', 'google']);
+        const SYSTEM_SOURCES = new Set(['cadastre', 'gdi', 'auto_estimate', 'osm', 'meta_lidar', 'microsoft', 'google']);
+
+        // Everything the Overture layer can attribute a property to. These are DATASETS INSIDE
+        // Overture, not separate providers we query: we read one table, overture_building_footprint,
+        // and each property carries the dataset it came from. So the tab is "Overture" (where the
+        // data comes from) while the row tag stays osm / microsoft / google / meta_lidar (who
+        // originally supplied it) — same reason the map outline toggle says Overture.
+        const OVERTURE_SOURCES = new Set(['osm', 'meta_lidar', 'microsoft', 'google']);
+
+        // Source tabs, in the order they appear. `match` groups the raw source strings; a tab is
+        // rendered only when the building actually has claims for it.
+        const SOURCE_TABS = [
+            { key: '',         label: 'Svi',      cls: '',         match: () => true },
+            { key: 'cadastre', label: 'Katastar', cls: 'cadastre', match: s => s === 'cadastre' },
+            { key: 'gdi',      label: 'GDI',      cls: 'gdi',      match: s => s === 'gdi' },
+            { key: 'overture', label: 'Overture', cls: 'overture', match: s => OVERTURE_SOURCES.has(s) },
+            { key: 'gup',      label: 'Gradnja',  cls: 'gup',      match: s => s.startsWith('gup:') },
+            { key: 'estimate', label: 'Procjena', cls: '',         match: s => s === 'auto_estimate' },
+            { key: 'user',     label: 'Unosi',    cls: '',         match: s => !isSystemSource(s) },
+        ];
+
+        // Which tabs carry a map-footprint checkbox, and how each one is wired. A source with no
+        // geometry for this building (or none at all, like Procjena) simply has no checkbox.
+        const TAB_FOOTPRINTS = {
+            cadastre: { visible: () => cadastreOutlineVisible, toggle: 'toggleCadastrePolygon', has: () => !!selectedLayer },
+            gdi:      { visible: () => gdiOverlayVisible,      toggle: 'toggleGdiPolygon',      has: d => !!(d.gdi && d.gdi.polygon) },
+            overture: { visible: () => osmOverlayVisible,      toggle: 'toggleOverturePolygon', has: d => !!d.overture_polygon },
+        };
+
+        // How close a provenance link gets to the actual building. Shown next to the link,
+        // because "izdavač" and "izravno na zgradu" are very different promises.
+        const SOURCE_LEVEL_LABELS = {
+            building: 'izravno na zgradu',
+            dataset: 'skup podataka',
+            provider: 'izdavač',
+        };
+
+        // The "Izvor:" line under the tabs: where the data in the current tab came from, linking
+        // as deep as the publisher allows — the building itself, else the dataset, else the
+        // publisher's site. Server-supplied for the three geometric sources (only it knows the
+        // ids); the two computed tabs point at this app's own method and export.
+        function sourceInfoHtml(d, tabKey) {
+            const links = d.source_links || {};
+            const parts = [];
+            const pushLink = (key) => {
+                const l = links[key];
+                if (!l || !l.url) return;
+                const level = SOURCE_LEVEL_LABELS[l.level] || l.level || '';
+                parts.push(`<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.label)}</a>`
+                    + (level ? ` <span class="src-level">${escapeHtml(level)}</span>` : '')
+                    + (l.note ? ` <span class="src-note">${escapeHtml(l.note)}</span>` : ''));
+            };
+
+            if (!tabKey) {
+                // "Svi" mixes every source, so a single Izvor line would be a pile of links with
+                // no context. The row still renders, empty, so the table doesn't jump when you
+                // switch to a tab that does have one.
+                return '<div class="source-info">&nbsp;</div>';
+            } else if (tabKey === 'gup') {
+                pushLink('codechecker');   // parcel-level: what may be built there
+                pushLink('gup');           // the official plan map, zone boundaries
+            } else if (links[tabKey]) {
+                pushLink(tabKey);
+            } else if (tabKey === 'estimate') {
+                parts.push(`<a href="#" onclick="event.preventDefault();document.getElementById('classModal').classList.add('open')">Izračun ove stranice</a> <span class="src-level">metoda i pragovi</span>`);
+            } else {
+                parts.push(`<a href="https://github.com/Poglavar/zagreb-buildings/blob/main/data/claims.json" target="_blank" rel="noopener">Korisnički unosi (claims.json)</a> <span class="src-level">dnevni izvoz</span>`);
+            }
+
+            if (!parts.length) return '';
+            return `<div class="source-info"><span class="src-key">Izvor:</span>${parts.join('<span class="src-sep">·</span>')}</div>`;
+        }
+
+        function isSystemSource(source) {
+            return SYSTEM_SOURCES.has(source) || source.startsWith('gup:');
+        }
+
+        function sourceTabMatches(source, tabKey) {
+            if (!tabKey) return true;
+            const tab = SOURCE_TABS.find(t => t.key === tabKey);
+            return tab ? tab.match(source) : source === tabKey;
+        }
+
+        // Display names for the source tags. The KEYS stay as they are — they are the API's
+        // vocabulary, the CSS class and the tab grouping — only what the reader sees is Croatian,
+        // matching the tab labels (katastar, procjena) instead of sitting in English beside them.
+        const SOURCE_LABELS = {
+            cadastre: 'katastar',
+            gdi: 'GDI',
+            osm: 'OSM',
+            meta_lidar: 'Meta lidar',
+            microsoft: 'Microsoft',
+            google: 'Google',
+            auto_estimate: 'procjena',
+        };
+
+        function sourceLabel(source) {
+            if (SOURCE_LABELS[source]) return SOURCE_LABELS[source];
+            if (source.startsWith('gup:')) return `GUP ${source.slice(4)}`;
+            // Prefixed sources carry the contributor after the colon; translate the prefix only.
+            if (source.startsWith('heritage:')) return `baština: ${source.slice(9)}`;
+            if (source.startsWith('user:')) return source.slice(5);
+            return source;
+        }
 
         // Map Overture dataset names to display-friendly source names
         const OVERTURE_DATASET_MAP = {
@@ -634,14 +897,17 @@
             .then(types => { BUILDING_TYPES = types; })
             .catch(() => {});
 
-        const MIN_ZOOM_ALL = 17;   // "Load All" requires this zoom level
-        const MIN_ZOOM_EDIT = 17;  // Popups & editing require this zoom level
+        const MIN_ZOOM_ALL = 17;     // "Sve zgrade" needs this: every polygon, full detail
+        const MIN_ZOOM_POLYGONS = 15; // below this, individual polygons are sub-pixel
+        // Only these two aggregate meaningfully, so only they have anything to show below
+        // MIN_ZOOM_POLYGONS (as a heatmap). Every other field is a per-building value.
+        const HEATMAP_FIELDS = new Set(['jobs', 'residents']);
 
         const statusEl = document.getElementById('status');
         const statsBar = document.getElementById('statsBar');
-        const loadFieldBtn = document.getElementById('loadFieldBtn');
+        const modeFieldBtn = document.getElementById('modeFieldBtn');
+        const modeAllBtn = document.getElementById('modeAllBtn');
         const fieldSelect = document.getElementById('fieldSelect');
-        const loadAllBtn = document.getElementById('loadAllBtn');
         const legendEl = document.getElementById('legend');
         const zoomEl = document.getElementById('zoom-level');
 
@@ -679,77 +945,134 @@
         // Track current data mode so we know what interaction is allowed
         let currentMode = null; // null | 'heatmap' | 'jobs' | 'all'
 
+        // ─── View mode + what the current zoom allows ────────────────────────
+        // Two mutually exclusive states, not two actions: 'field' colours buildings by one
+        // field, 'all' loads everything with full detail. Switching either the mode or the
+        // field loads immediately — the old UI made you press a separate button, so changing
+        // the dropdown appeared to do nothing.
+        let viewMode = 'field';
+        let fieldCoverage = null;   // field → number of buildings citywide that have a value
+
+        function fieldAvailableAtZoom(field, zoom) {
+            return zoom >= MIN_ZOOM_POLYGONS || HEATMAP_FIELDS.has(field);
+        }
+
+        // "533k" rather than "533.018": the picker sits in a wrapping header, and the exact
+        // figure is not what the reader needs — only the order of magnitude.
+        function compactCount(n) {
+            if (n >= 10000) return `${Math.round(n / 1000)}k`;
+            return n.toLocaleString('hr-HR');
+        }
+
+        function fieldHasData(field) {
+            return !fieldCoverage || (fieldCoverage[field] || 0) > 0;
+        }
+
+        // Label each option with its citywide coverage and disable the ones that cannot draw
+        // anything — either because nobody has entered that data (rent) or because the current
+        // zoom is too low for per-building polygons.
+        function updateFieldOptions() {
+            const zoom = map.getZoom();
+            for (const option of fieldSelect.options) {
+                const field = option.value;
+                const base = option.dataset.baseLabel || (option.dataset.baseLabel = option.textContent);
+                const count = fieldCoverage ? fieldCoverage[field] : null;
+                const noData = count === 0;
+                const tooFar = !fieldAvailableAtZoom(field, zoom);
+
+                option.disabled = noData || tooFar;
+                option.textContent = noData
+                    ? `${base} (nema podataka)`
+                    : count != null
+                    ? `${base} (${compactCount(count)})`
+                    : base;
+                option.title = tooFar ? `Zumirajte na razinu ${MIN_ZOOM_POLYGONS}+` : '';
+            }
+        }
+
         function updateZoomUI() {
             const z = map.getZoom();
             zoomEl.textContent = 'z' + z.toFixed(1);
+            syncPanelTop();
             const canLoadAll = z >= MIN_ZOOM_ALL;
-            loadAllBtn.disabled = !canLoadAll;
-            loadAllBtn.title = canLoadAll ? '' : `Zumirajte na razinu ${MIN_ZOOM_ALL}+ za aktivaciju`;
+            modeAllBtn.disabled = !canLoadAll;
+            modeAllBtn.title = canLoadAll ? '' : `Zumirajte na razinu ${MIN_ZOOM_ALL}+ za aktivaciju`;
+            updateFieldOptions();
         }
-        map.on('zoomend', updateZoomUI);
-        updateZoomUI();
 
-        // ─── Right-anchored popup: opens to the right, tip points left ──────
+        function applyModeButtons() {
+            for (const [btn, mode] of [[modeFieldBtn, 'field'], [modeAllBtn, 'all']]) {
+                const active = viewMode === mode;
+                btn.classList.toggle('active', active);
+                btn.setAttribute('aria-pressed', String(active));
+            }
+            fieldSelect.disabled = viewMode !== 'field';
+        }
+
+        // Coverage is a property of the dataset, so it is fetched once. Failure is silent by
+        // design: without it the options simply carry no counts and none are pre-disabled.
+        fetch(`${API_BASE}/api/buildings/field-coverage`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => { if (data) { fieldCoverage = data; updateFieldOptions(); } })
+            .catch(() => {});
+
+        // ─── Building panel ──────────────────────────────────────────────────
+        // A Leaflet popup pinned to the window rather than to a point on the map: full height
+        // down the right edge on desktop, a collapsible bottom sheet on phones. It has to leave
+        // the map pane to do that — `position: fixed` inside a transformed pane is positioned
+        // against the pane, not the window — so the container is re-parented to <body>.
+        //
+        // Both positioning methods are deliberately inert. Leaflet recomputes popup position on
+        // every zoom, pan and content change; for a window-pinned panel every one of those
+        // recomputations was a jump.
         const RightPopup = L.Popup.extend({
             _updatePosition: function () {
-                if (!this._map) return;
-                const pos = this._map.latLngToLayerPoint(this._latlng);
-                const offset = L.point(this.options.offset || [0, 0]);
+                if (!this._map || !this._container) return;
                 const container = this._container;
-                const containerHeight = container.offsetHeight;
-                const containerWidth = container.offsetWidth;
-                if (window.innerWidth <= 600) {
-                    // Mobile: bottom sheet — move to body, override Leaflet positioning
-                    if (!container.classList.contains('mobile-bottom-sheet')) {
-                        container.classList.add('mobile-bottom-sheet');
-                        document.body.appendChild(container);
-                    }
-                    container.style.transform = 'none';
-                    return;
-                } else {
-                    // Desktop: anchor from left-center of popup (opens to the right)
-                    L.DomUtil.setPosition(container, pos.add([offset.x, offset.y - containerHeight / 2]));
+                if (container.parentNode !== document.body) {
+                    container.classList.add('mobile-bottom-sheet');   // styles the sheet on phones
+                    document.body.appendChild(container);
                 }
+                container.style.transform = 'none';
+                container.style.left = '';
+                container.style.top = '';
             },
-            _adjustPan: function () {
-                if (!this.options.autoPan || !this._map) return;
-                const container = this._container;
-                const mapSize = this._map.getSize();
-                const anchor = this._map.latLngToContainerPoint(this._latlng);
-                const offset = L.point(this.options.offset || [0, 0]);
-                const popW = container.offsetWidth;
-                const popH = container.offsetHeight;
-                const padTL = L.point(this.options.autoPanPaddingTopLeft || [20, 20]);
-                const padBR = L.point(this.options.autoPanPaddingBottomRight || [20, 20]);
-
-                if (window.innerWidth <= 600) return; // fixed bottom sheet, no pan needed
-
-                // Desktop: right-anchored
-                const left = anchor.x + offset.x;
-                const right = left + popW;
-                const top = anchor.y + offset.y - popH / 2;
-                const bottom = top + popH;
-
-                let dx = 0, dy = 0;
-                if (right + padBR.x > mapSize.x) dx = right + padBR.x - mapSize.x;
-                if (left - padTL.x < 0) dx = left - padTL.x;
-                if (bottom + padBR.y > mapSize.y) dy = bottom + padBR.y - mapSize.y;
-                if (top - padTL.y < 0) dy = top - padTL.y;
-
-                if (dx || dy) {
-                    this._map.panBy([dx, dy], { animate: true, duration: 0.3 });
-                }
-            },
+            _adjustPan: function () { /* pinned panel — nothing to pan into view */ },
             onRemove: function (map) {
-                // Clean up mobile bottom sheet: remove class so next _updatePosition
-                // re-appends to document.body (position:fixed breaks inside map pane transforms)
-                if (this._container && this._container.classList.contains('mobile-bottom-sheet')) {
-                    this._container.classList.remove('mobile-bottom-sheet');
+                if (this._container) {
+                    this._container.classList.remove('mobile-bottom-sheet', 'sheet-collapsed');
                     this._container.remove();
                 }
                 L.Popup.prototype.onRemove.call(this, map);
             },
         });
+
+        // The panel starts below the header, whose height changes when it wraps on narrow
+        // windows — so it is measured rather than assumed.
+        function syncPanelTop() {
+            const header = document.querySelector('header');
+            if (header) {
+                document.documentElement.style.setProperty('--panel-top', `${header.offsetHeight}px`);
+            }
+        }
+        window.addEventListener('resize', syncPanelTop);
+        // The header grows a row when its contents wrap, and that happens after data loads
+        // change the stats text — so re-measure whenever it can have changed, not just on
+        // resize. (A ResizeObserver would be tidier but did not fire reliably here.)
+        syncPanelTop();
+
+        // Mobile: fold the sheet down to its title row and back.
+        window.toggleSheet = function (event) {
+            if (event) { event.stopPropagation(); event.preventDefault(); }
+            const panel = document.querySelector('.leaflet-popup.popup-right');
+            if (!panel) return;
+            const collapsed = panel.classList.toggle('sheet-collapsed');
+            const btn = panel.querySelector('.sheet-toggle');
+            if (btn) {
+                btn.textContent = collapsed ? '▴' : '▾';
+                btn.title = collapsed ? 'Proširi' : 'Sklopi';
+            }
+        };
 
         // ─── Building & heatmap layers ──────────────────────────────────────
         let buildingsLayer = null;
@@ -874,10 +1197,13 @@
             if (source === 'cadastre') return 'cadastre';
             if (source === 'osm') return 'osm';
             if (source === 'auto_estimate') return 'auto_estimate';
-            if (source === '3d_survey') return 'three_d_survey';
+            if (source === 'gdi') return 'gdi';
             if (source === 'meta_lidar') return 'meta_lidar';
             if (source === 'microsoft') return 'microsoft';
             if (source === 'google') return 'google';
+            // Each GUP version gets its own tint: the whole point of showing both is telling
+            // at a glance which limits are the old plan's and which the new one's.
+            if (source.startsWith('gup:')) return `gup gup-${source.slice(4)}`;
             if (source.startsWith('ai:')) return 'ai';
             if (source.startsWith('heritage:')) return 'heritage';
             if (source.startsWith('user:correction')) return 'user_correction';
@@ -886,23 +1212,76 @@
 
         // ─── Detail cache for current popup ──────────────────────────────────
         let currentDetail = null;
+        let currentSourceTabs = [];   // tab index → source-group key, for the popup's filter tabs
         let osmLoadState = null; // null | 'loading' | 'done' | 'error:message'
         let osmOverlayLayer = null;
         let osmOverlayVisible = false;
+        // GDI footprint overlay + the clicked cadastre feature, so all three footprints of the
+        // same building can be shown or hidden independently and compared on the map.
+        let gdiOverlayLayer = null;
+        let gdiOverlayVisible = false;
+        let selectedLayer = null;
+        let selectedCadastreId = null;   // set synchronously on click; see the popup 'remove' guard
+        let cadastreOutlineVisible = true;
+        // While a popup is open its cadastre polygon is drawn as a comparison layer, in the same
+        // blue the GDI and Overture overlays use for theirs — the choropleth fill alone is too
+        // faint to compare against them.
+        const CADASTRE_SELECTED_STYLE = { color: '#1864ab', weight: 3, opacity: 1, dashArray: null };
+        const CADASTRE_HIDDEN_STYLE = { opacity: 0, fillOpacity: 0 };
 
         // ─── Popup HTML builder ──────────────────────────────────────────────
         function buildPopupHtml(detail, sourceFilter) {
             const d = detail;
             const claims = d.claims || {};
-            const sources = d.sources || [];
             const cadastreId = d.cadastre_building_id;
 
-            // Filter dropdown
-            const filterOptions = ['<option value="">Svi izvori</option>'];
-            for (const s of sources) {
-                const sel = sourceFilter === s ? ' selected' : '';
-                filterOptions.push(`<option value="${escapeHtml(s)}"${sel}>${escapeHtml(s)}</option>`);
+            // Source tabs — one per group this building actually has claims for, with the number
+            // of rows behind it. A source no group covers (a new provider, a user's own label)
+            // still gets its own tab, so nothing can silently fall out of the filter.
+            const claimCounts = new Map();
+            for (const field of DISPLAY_FIELDS) {
+                for (const c of claims[field] || []) {
+                    claimCounts.set(c.source, (claimCounts.get(c.source) || 0) + 1);
+                }
             }
+            const grouped = new Set();
+            const tabs = [];
+            for (const tab of SOURCE_TABS) {
+                let n = 0;
+                for (const [s, count] of claimCounts) {
+                    if (!tab.match(s)) continue;
+                    n += count;
+                    if (tab.key) grouped.add(s);
+                }
+                if (n > 0) tabs.push({ key: tab.key, label: tab.label, cls: tab.cls, n });
+            }
+            for (const [s, n] of claimCounts) {
+                if (!grouped.has(s)) tabs.push({ key: s, label: sourceLabel(s), cls: '', n });
+            }
+            // Tabs are addressed by INDEX, never by their source string: a claim source is free
+            // text a user typed, and escapeHtml() does not escape quotes — inlining one into an
+            // onclick would hand them a script-injection hole.
+            currentSourceTabs = tabs.map(t => t.key);
+            // Overture arrives after the popup opens; its progress sits next to the tabs, since
+            // "no Overture tab" and "Overture still loading" look identical otherwise.
+            const osmStatusHtml = osmLoadState === 'loading'
+                ? '<span class="osm-status"><span class="osm-spinner"></span></span>'
+                : osmLoadState === 'nodata'
+                ? '<span class="osm-status" style="color:#868e96">Overture: nema podataka na točki klika</span>'
+                : osmLoadState && osmLoadState.startsWith('error:')
+                ? `<span class="osm-status"><button class="osm-retry" onclick="window.retryOverture(event)" title="Pokušaj ponovo">🔄</button> Overture nije dohvaćen <span class="osm-error">(${escapeHtml(osmLoadState.slice(6))})</span></span>`
+                : '';
+
+            const tabsHtml = tabs.map((t, i) => {
+                const active = (sourceFilter || '') === t.key ? ' active' : '';
+                const fp = TAB_FOOTPRINTS[t.key];
+                // The checkbox drives the map overlay only — stopPropagation keeps it from also
+                // switching the tab, so showing a footprint never changes what the table lists.
+                const fpHtml = fp && fp.has(d)
+                    ? `<input type="checkbox" class="tab-fp" ${fp.visible() ? 'checked' : ''} title="Prikaži tlocrt na karti" onclick="event.stopPropagation()" onchange="window.${fp.toggle}()">`
+                    : '';
+                return `<span class="source-tab ${t.cls}${active}">${fpHtml}<button type="button" class="tab-btn" onclick="filterSource(${i}, event)">${escapeHtml(t.label)}<span class="count">${t.n}</span></button></span>`;
+            }).join('');
 
             // Claims table rows
             let claimsHtml = '';
@@ -910,7 +1289,7 @@
                 const arr = claims[field];
                 if (!arr || arr.length === 0) continue;
                 for (const c of arr) {
-                    if (sourceFilter && c.source !== sourceFilter) continue;
+                    if (sourceFilter && !sourceTabMatches(c.source, sourceFilter)) continue;
                     const urlHtml = field === 'history_url' ? ''
                         : c.source_url
                         ? `<a class="url-link" href="${escapeHtml(c.source_url)}" target="_blank" rel="noopener">[src]</a>`
@@ -924,11 +1303,19 @@
                         displayValue = escapeHtml(c.text);
                     } else if (field === 'area_m2' || field === 'height_m') {
                         displayValue = Number(c.value).toFixed(1);
+                    } else if (field === 'volume_m3') {
+                        displayValue = Math.round(c.value).toLocaleString('hr-HR');
                     } else {
                         displayValue = Math.round(c.value);
                     }
-                    const derivedTooltip = c.derived_tooltip || 'Izvedena vrijednost';
-                    const derivedHtml = c.derived ? `<span class="derived-tag" title="${escapeHtml(derivedTooltip)}">derived</span>` : '';
+                    const derivedHtml = c.derived
+                        ? `<span class="derived-tag" title="${escapeHtml(c.derived_tooltip || 'Izvedena vrijednost')}">derived</span>`
+                        : '';
+                    // A GDI object can be a whole terraced row: mark values that describe the
+                    // block rather than this one building, so 581 m² next to 88 m² makes sense.
+                    const sharedHtml = c.shared_object
+                        ? `<span class="shared-tag" title="${escapeHtml(c.derived_tooltip || '')}">×${c.shared_count}</span>`
+                        : '';
 
                     // For AI year_built claims, append expandable reasoning below the row
                     let aiDetailHtml = '';
@@ -954,7 +1341,7 @@
                     claimsHtml += `<tr>
                         <td class="field-name">${FIELD_LABELS[field]}</td>
                         <td class="value">${displayValue}</td>
-                        <td>${derivedHtml}<span class="source-tag ${sourceTagClass(c.source)}">${escapeHtml(c.source)}</span>${urlHtml}</td>
+                        <td><span class="source-tag ${sourceTagClass(c.source)}">${escapeHtml(sourceLabel(c.source))}</span>${derivedHtml}${sharedHtml}${urlHtml}</td>
                     </tr>${aiDetailHtml}`;
                 }
             }
@@ -967,24 +1354,17 @@
             return `
                 <div class="bld-popup">
                     <div class="bld-popup-header">
-                        <h3>${d.osm_name ? escapeHtml(d.osm_name) : escapeHtml(d.cadastre_building_type_name || 'Nepoznata vrsta')}${d.lat && d.lon ? ` <a class="street-view-link" href="https://www.google.com/maps?cbll=${d.lat},${d.lon}&cbp=12,0,0,0,0&layer=c" target="_blank" rel="noopener">Street View ↗</a>` : ''} <button class="share-link" onclick="window.shareBuilding(${cadastreId})" title="Kopiraj link"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button></h3>
-                        <div class="ids">
-                            <span style="color:#868e96;font-size:11px;">Tlocrt:</span>
-                            <label class="outline-toggle"><input type="checkbox" checked disabled><span class="outline-label cadastre">katastar</span></label>
-                            ${d.overture_polygon ? `<label class="outline-toggle"><input type="checkbox" onchange="window.toggleOverturePolygon()"><span class="outline-label osm">Overture</span></label>` : ''}${osmLoadState === 'loading' ? '<span class="osm-status"><span class="osm-spinner"></span></span>' : osmLoadState === 'nodata' ? '<span class="osm-status" style="color:#868e96">Nema podataka na točki klika</span>' : osmLoadState && osmLoadState.startsWith('error:') ? `<span class="osm-status"><button class="osm-retry" onclick="window.retryOverture(event)" title="Pokušaj ponovo">🔄</button> Podaci nisu dohvaćeni <span class="osm-error">(${escapeHtml(osmLoadState.slice(6))})</span></span>` : ''}
-                        </div>
+                        <h3>${d.osm_name ? escapeHtml(d.osm_name) : escapeHtml(d.cadastre_building_type_name || 'Nepoznata vrsta')} <button class="btn-3d" onclick="window.openBuilding3d(${cadastreId})" title="Usporedi 3D modele izvora">3D</button>${d.lat && d.lon ? ` <a class="street-view-link" href="https://www.google.com/maps?cbll=${d.lat},${d.lon}&cbp=12,0,0,0,0&layer=c" target="_blank" rel="noopener">Street View ↗</a>` : ''} <button type="button" class="sheet-toggle" onclick="window.toggleSheet(event)" title="Sklopi">▾</button> <button class="share-link" onclick="window.shareBuilding(${cadastreId})" title="Kopiraj link"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button></h3>
                     </div>
                     <div class="bld-popup-body">
-                        <div class="source-filter">
-                            <label>Izvor:</label>
-                            <select onchange="filterSource(this.value)">
-                                ${filterOptions.join('')}
-                            </select>
+                        <div class="source-tabs">${tabsHtml}${osmStatusHtml}</div>
+                        ${sourceInfoHtml(d, sourceFilter)}
+                        <div class="claims-scroll">
+                            <table class="claims-table">
+                                <thead><tr><th>Polje</th><th>Vrijednost</th><th>Izvor</th></tr></thead>
+                                <tbody>${claimsHtml}</tbody>
+                            </table>
                         </div>
-                        <table class="claims-table">
-                            <thead><tr><th>Polje</th><th>Vrijednost</th><th>Izvor</th></tr></thead>
-                            <tbody>${claimsHtml}</tbody>
-                        </table>
                     </div>
                     <div class="bld-popup-footer">
                         <div class="add-claim">
@@ -1016,16 +1396,19 @@
         // Update the currently open popup's content
         function updateOpenPopup(html) {
             map.eachLayer(l => {
-                if (l instanceof RightPopup && l._map) {
-                    l.setContent(html);
-                    setTimeout(() => { if (l._map) l._updatePosition(); }, 50);
-                }
+                if (l instanceof RightPopup && l._map) l.setContent(html);
             });
         }
 
-        window.filterSource = function (source) {
+        // stopPropagation is load-bearing, not defensive. Leaflet only suppresses a popup-closing
+        // map click by walking UP the DOM from the click target looking for its content node —
+        // and this handler replaces the popup's innerHTML, orphaning the button mid-event. The
+        // walk then finds nothing, the map treats it as a click on itself, and the popup closes
+        // under you. Same reason retryOverture() below stops propagation.
+        window.filterSource = function (tabIndex, event) {
+            if (event) { event.stopPropagation(); event.preventDefault(); }
             if (!currentDetail) return;
-            updateOpenPopup(buildPopupHtml(currentDetail, source || null));
+            updateOpenPopup(buildPopupHtml(currentDetail, currentSourceTabs[tabIndex] || null));
         };
 
         window.shareBuilding = function (cadastreId) {
@@ -1053,6 +1436,91 @@
             osmOverlayVisible = false;
         }
 
+        function removeGdiOverlay() {
+            if (gdiOverlayLayer) {
+                map.removeLayer(gdiOverlayLayer);
+                gdiOverlayLayer = null;
+            }
+            gdiOverlayVisible = false;
+        }
+
+        // Draw a building in its normal style — EXCEPT the selected one, which is emphasised
+        // while its popup is open and disappears entirely when its katastar toggle is off.
+        //
+        // Every hover handler goes through here. They used to call buildingStyle() directly,
+        // which un-hid the outline the instant the pointer crossed the polygon — and since the
+        // popup opens to the right of the building, moving to the checkbox usually does exactly
+        // that, so the toggle looked like it did nothing.
+        // The pulse lives in CSS on the rendered SVG path, so it survives every setStyle call
+        // (which rewrites presentation attributes, not classes) and costs nothing per frame.
+        function markSelectedElement(layer, on) {
+            const el = layer && layer.getElement && layer.getElement();
+            if (el && el.classList) el.classList.toggle('selected-building', !!on);
+        }
+
+        function restyleBuilding(layer, feature) {
+            if (!layer || !layer.setStyle) return;
+            const f = feature || layer.feature;
+            if (layer === selectedLayer) {
+                layer.setStyle(cadastreOutlineVisible
+                    ? { ...buildingStyle(f), ...CADASTRE_SELECTED_STYLE }
+                    : CADASTRE_HIDDEN_STYLE);
+                // Hidden means hidden: a glow around an invisible outline makes no sense.
+                markSelectedElement(layer, cadastreOutlineVisible);
+                return;
+            }
+            layer.setStyle(buildingStyle(f));
+            markSelectedElement(layer, false);
+        }
+
+        function highlightBuilding(layer) {
+            if (layer === selectedLayer && !cadastreOutlineVisible) return;
+            layer.setStyle({ weight: 3, fillOpacity: 0.6 });
+        }
+
+        // Drop the selection and put the polygon back the way buildingStyle draws it.
+        function restoreCadastreOutline() {
+            const layer = selectedLayer;
+            selectedLayer = null;
+            cadastreOutlineVisible = true;
+            if (layer && layer.setStyle && layer.feature) {
+                layer.setStyle(buildingStyle(layer.feature));
+                markSelectedElement(layer, false);
+            }
+        }
+
+        window.toggleCadastrePolygon = function () {
+            if (!selectedLayer) return;
+            cadastreOutlineVisible = !cadastreOutlineVisible;
+            restyleBuilding(selectedLayer, selectedLayer.feature);
+        };
+
+        function selectCadastreLayer(feature, layer) {
+            selectedLayer = layer;
+            cadastreOutlineVisible = true;
+            restyleBuilding(layer, feature);
+            layer.bringToFront();   // the glow is clipped by neighbours if it stays underneath
+        }
+
+        window.toggleGdiPolygon = function () {
+            const ring = currentDetail && currentDetail.gdi && currentDetail.gdi.polygon;
+            if (!ring) return;
+            if (gdiOverlayVisible) {
+                removeGdiOverlay();
+            } else {
+                gdiOverlayLayer = L.polygon(ring.map(c => [c[1], c[0]]), {
+                    color: '#d9480f',
+                    weight: 2.5,
+                    fillColor: '#ffa94d',
+                    fillOpacity: 0.2,
+                    dashArray: '2 4',
+                    interactive: false,
+                });
+                gdiOverlayLayer.addTo(map);
+                gdiOverlayVisible = true;
+            }
+        };
+
         window.toggleOverturePolygon = function () {
             if (!currentDetail || !currentDetail.overture_polygon) return;
             if (osmOverlayVisible) {
@@ -1070,6 +1538,121 @@
                 osmOverlayLayer.addTo(map);
                 osmOverlayVisible = true;
             }
+        };
+
+        // ─── 3D compare dialog ───────────────────────────────────────────────
+        // Draws the cadastre, GDI and Overture records of one building in one scene. three.js
+        // and js/building-3d.js are pulled on first open only — they are ~700 KB the map does
+        // not need. Needs to be served over http (module imports don't work from file://).
+        let viewer3d = null;
+
+        function disposeViewer3d() {
+            if (viewer3d) { viewer3d.dispose(); viewer3d = null; }
+        }
+
+        function legendToggle(label, checked, onChange) {
+            const wrap = document.createElement('label');
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.checked = checked;
+            input.addEventListener('change', () => onChange(input.checked));
+            wrap.appendChild(input);
+            wrap.appendChild(document.createTextNode(label));
+            return wrap;
+        }
+
+        function renderModel3dLegend(legend, data, colors) {
+            legend.innerHTML = '';
+            for (const m of viewer3d.models) {
+                const row = document.createElement('div');
+                row.className = 'm3d-model';
+
+                const swatch = document.createElement('span');
+                swatch.className = 'swatch';
+                swatch.style.background = '#' + colors[m.key].toString(16).padStart(6, '0');
+                row.appendChild(swatch);
+
+                const name = document.createElement('span');
+                name.className = 'name';
+                name.textContent = m.label;
+                row.appendChild(name);
+
+                if (m.note) {
+                    const note = document.createElement('span');
+                    note.className = 'note';
+                    note.textContent = m.note;
+                    row.appendChild(note);
+                }
+
+                row.appendChild(legendToggle('prikaži', true, v => viewer3d.setVisible(m.key, v)));
+                row.appendChild(legendToggle('puno', false, v => viewer3d.setSolid(m.key, v)));
+                legend.appendChild(row);
+            }
+
+            // Rotation is a property of the view, not of any one source — it belongs in the
+            // header alongside the title, not in the per-source list.
+            const spin = document.getElementById('model3dSpin');
+            spin.checked = viewer3d.isSpinning();
+            spin.onchange = () => viewer3d.setSpinning(spin.checked);
+
+            // Parcel outlines are context for the whole scene, so they live in the header too.
+            // Hidden entirely when this building has no parcels within the radius.
+            const parcelsWrap = document.getElementById('model3dParcelsWrap');
+            const parcelsBox = document.getElementById('model3dParcels');
+            parcelsWrap.style.display = viewer3d.parcelCount ? '' : 'none';
+            parcelsWrap.title = viewer3d.parcelCount
+                ? `${viewer3d.parcelCount} čestica u krugu ${data.parcel_radius_m} m`
+                : '';
+            parcelsBox.checked = true;
+            parcelsBox.onchange = () => viewer3d.setParcelsVisible(parcelsBox.checked);
+
+            // Say which sources have nothing for this building rather than quietly showing two.
+            const present = new Set(viewer3d.models.map(m => m.key));
+            const missing = [
+                !present.has('dgu') && 'katastar',
+                !present.has('gdi') && 'GDI',
+                !present.has('overture') && 'Overture',
+            ].filter(Boolean);
+            if (missing.length) {
+                const el = document.createElement('span');
+                el.className = 'm3d-missing';
+                el.textContent = `Nema podataka: ${missing.join(', ')}`;
+                legend.appendChild(el);
+            }
+        }
+
+        window.openBuilding3d = async function (cadastreId) {
+            const overlay = document.getElementById('model3dModal');
+            const legend = document.getElementById('model3dLegend');
+            document.getElementById('model3dTitle').textContent = `3D usporedba izvora — zgrada ${cadastreId}`;
+            legend.innerHTML = '<span class="m3d-missing">Učitavanje…</span>';
+            disposeViewer3d();
+            overlay.classList.add('open');
+
+            try {
+                const [res, module] = await Promise.all([
+                    fetch(`${API_BASE}/api/building/${cadastreId}/models3d`),
+                    import('./js/building-3d.js?v=1'),
+                ]);
+                if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+                const data = await res.json();
+                if (!overlay.classList.contains('open')) return;   // closed while loading
+
+                viewer3d = module.createViewer(document.getElementById('model3dCanvas'), data);
+                if (!viewer3d) {
+                    legend.innerHTML = '<span class="m3d-missing">Nijedan izvor nema geometriju za ovu zgradu.</span>';
+                    return;
+                }
+                for (const m of viewer3d.models) viewer3d.setSolid(m.key, false);
+                renderModel3dLegend(legend, data, module.MODEL_COLORS);
+            } catch (e) {
+                legend.innerHTML = `<span class="m3d-missing">Greška pri učitavanju 3D modela: ${escapeHtml(e.message || 'nepoznata greška')}</span>`;
+            }
+        };
+
+        window.closeBuilding3d = function () {
+            disposeViewer3d();
+            document.getElementById('model3dModal').classList.remove('open');
         };
 
         async function loadOvertureForPopup(cadastreId, popup) {
@@ -1121,30 +1704,6 @@
             }
         };
 
-        function ensurePopupVisible(popup) {
-            if (!popup._map || !popup._container) return;
-            if (window.innerWidth <= 600) return; // fixed bottom sheet, no pan needed
-            const container = popup._container;
-            const mapSize = popup._map.getSize();
-            const anchor = popup._map.latLngToContainerPoint(popup._latlng);
-            const offset = L.point(popup.options.offset || [0, 0]);
-            const popW = container.offsetWidth;
-            const popH = container.offsetHeight;
-            const padTop = 50, padRight = 20, padBottom = 40, padLeft = 20;
-
-            const left = anchor.x + offset.x;
-            const right = left + popW;
-            const top = anchor.y + offset.y - popH / 2;
-            const bottom = top + popH;
-
-            let dx = 0, dy = 0;
-            if (right + padRight > mapSize.x) dx = right + padRight - mapSize.x;
-            if (left - padLeft < 0) dx = left - padLeft;
-            if (bottom + padBottom > mapSize.y) dy = bottom + padBottom - mapSize.y;
-            if (top - padTop < 0) dy = top - padTop;
-
-            if (dx || dy) popup._map.panBy([dx, dy], { animate: true, duration: 0.3 });
-        }
 
         function isMobile() { return window.innerWidth <= 600; }
 
@@ -1154,9 +1713,13 @@
 
             // Clean up previous state
             removeOsmOverlay();
+            removeGdiOverlay();
+            restoreCadastreOutline();
+            selectCadastreLayer(feature, layer);
             osmLoadState = null;
 
             const cadastreId = feature.properties.cadastre_building_id;
+            selectedCadastreId = cadastreId;
 
             // Update URL to reflect selected building (skip if already on this URL)
             const basePath = window.location.pathname.startsWith('/zgrade') ? '/zgrade' : '';
@@ -1167,7 +1730,6 @@
 
             const bounds = layer.getBounds();
             const center = bounds.getCenter();
-            const rightEdge = bounds.getEast();
             const mapSize = map.getSize();
             const mobile = isMobile();
 
@@ -1190,18 +1752,9 @@
             // Close any existing popup
             map.closePopup();
 
-            // Compute offset
+            // No offset maths: the panel is pinned to the window edge, not to the building.
+            // The pan above is what keeps the building visible beside it.
             const popup = layer._bldPopup;
-            if (mobile) {
-                // On mobile: use default Leaflet top-center popup positioning
-                popup.options.offset = [0, -10];
-            } else {
-                // Desktop: open to the right of the building
-                const centerPx = map.latLngToContainerPoint(center);
-                const rightPx = map.latLngToContainerPoint(L.latLng(center.lat, rightEdge));
-                const halfWidth = Math.max(rightPx.x - centerPx.x, 10);
-                popup.options.offset = [halfWidth + 15, 0];
-            }
 
             // Show loading state, open at building center
             popup.setContent('Učitavanje...');
@@ -1210,7 +1763,15 @@
 
             // When popup closes, clean up OSM overlay and reset URL
             popup.once('remove', () => {
+                // Clicking straight from one building to another closes THIS popup only after the
+                // new one has already claimed the selection and pushed its URL — cleaning up then
+                // would wipe both (which is what left the katastar toggle inert on the second
+                // building). Only tear down if this is still the current selection.
+                if (selectedCadastreId !== cadastreId) return;
+                selectedCadastreId = null;
                 removeOsmOverlay();
+                removeGdiOverlay();
+                restoreCadastreOutline();
                 const basePath = window.location.pathname.startsWith('/zgrade') ? '/zgrade' : '/';
                 history.pushState({}, '', `${basePath}${window.location.search}`);
             });
@@ -1223,12 +1784,6 @@
                 osmLoadState = 'loading';
                 popup.setContent(buildPopupHtml(currentDetail, null));
                 setStatus(`Zgrada ${cadastreId} učitana.`);
-
-                setTimeout(() => {
-                    if (!popup._map) return;
-                    popup._updatePosition();
-                    ensurePopupVisible(popup);
-                }, 50);
 
                 // Fetch Overture data in background and enrich popup
                 if (currentDetail.lat && currentDetail.lon) {
@@ -1291,7 +1846,7 @@
                             l.feature.properties.has_user_data = true;
                             if (field === 'jobs') l.feature.properties.effective_jobs = value;
                             if (activeField === field) l.feature.properties.field_value = value;
-                            l.setStyle(buildingStyle(l.feature));
+                            restyleBuilding(l, l.feature);
                         }
                     });
                 }
@@ -1313,14 +1868,12 @@
         }
 
         // ─── Load buildings with selected field (polygons or heatmap) ────────
-        loadFieldBtn.addEventListener('click', async () => {
+        async function loadFieldView() {
+            const option = fieldSelect.options[fieldSelect.selectedIndex];
             const field = fieldSelect.value;
-            const fieldLabel = fieldSelect.options[fieldSelect.selectedIndex].text;
-            const b = map.getBounds();
+            const fieldLabel = option.dataset.baseLabel || option.text;
+            const b = fetchBounds();
             const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
-            loadFieldBtn.textContent = 'Učitavanje...';
-            loadFieldBtn.disabled = true;
-            fieldSelect.disabled = true;
             try {
                 const zoom = map.getZoom();
                 const showPolygons = zoom >= 15;
@@ -1344,6 +1897,7 @@
                         gradient: heatGradient,
                     }).addTo(map);
                     setStatus(`Toplinska karta: ${points.length.toLocaleString()} zgrada s ${fieldLabel}. Zumirajte za detalje.`);
+                    return true;
                 } else if (zoom >= 15) {
                     // Polygon mode — color individual buildings by field value
                     const res = await fetch(`${API_BASE}/api/buildings?bbox=${bbox}&field=${field}`);
@@ -1383,45 +1937,41 @@
                             layer.on('click', () => onBuildingClick(feature, layer));
                             layer.on('mouseover', () => {
                                 if (hoveredLayer && hoveredLayer !== layer) {
-                                    hoveredLayer.setStyle(buildingStyle(hoveredLayer.feature));
+                                    restyleBuilding(hoveredLayer, hoveredLayer.feature);
                                 }
                                 hoveredLayer = layer;
-                                layer.setStyle({ weight: 3, fillOpacity: 0.6 });
+                                highlightBuilding(layer);
                                 layer.bringToFront();
                             });
                             layer.on('mouseout', () => {
                                 if (hoveredLayer === layer) hoveredLayer = null;
-                                layer.setStyle(buildingStyle(feature));
+                                restyleBuilding(layer, feature);
                             });
                         },
                     }).addTo(map);
                     updateLegend(field, activeFieldMin, activeFieldMax);
                     updateStats(geojson);
                     setStatus(`Učitano ${geojson.features.length.toLocaleString()} zgrada s ${fieldLabel}.`);
+                    return true;
                 } else {
                     // Non-jobs field at low zoom — polygons too small to see
-                    setStatus(`Zumirajte na razinu 15+ za prikaz zgrada po polju "${fieldLabel}".`);
+                    setStatus(`Zumirajte na razinu ${MIN_ZOOM_POLYGONS}+ za prikaz zgrada po polju "${fieldLabel}".`);
                 }
             } catch (e) {
                 console.error(e);
                 setStatus(`Greška pri učitavanju s ${API_BASE}. Je li server pokrenut?`, true);
-            } finally {
-                loadFieldBtn.textContent = 'Zgrade s';
-                loadFieldBtn.disabled = false;
-                fieldSelect.disabled = false;
             }
-        });
+            return false;
+        }
 
         // ─── Load all buildings (full detail + editing, zoom 17+ only) ───────
-        loadAllBtn.addEventListener('click', async () => {
+        async function loadAllView() {
             if (map.getZoom() < MIN_ZOOM_ALL) {
                 setStatus(`Zumirajte na razinu ${MIN_ZOOM_ALL}+ za učitavanje svih zgrada.`);
-                return;
+                return false;
             }
-            const b = map.getBounds();
+            const b = fetchBounds();
             const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
-            loadAllBtn.textContent = 'Učitavanje...';
-            loadAllBtn.disabled = true;
             try {
                 const res = await fetch(`${API_BASE}/api/buildings?bbox=${bbox}`);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1439,29 +1989,111 @@
                         layer.on('click', () => onBuildingClick(feature, layer));
                         layer.on('mouseover', () => {
                             if (hoveredLayer && hoveredLayer !== layer) {
-                                hoveredLayer.setStyle(buildingStyle(hoveredLayer.feature));
+                                restyleBuilding(hoveredLayer, hoveredLayer.feature);
                             }
                             hoveredLayer = layer;
-                            layer.setStyle({ weight: 3, fillOpacity: 0.6 });
+                            highlightBuilding(layer);
                             layer.bringToFront();
                         });
                         layer.on('mouseout', () => {
                             if (hoveredLayer === layer) hoveredLayer = null;
-                            layer.setStyle(buildingStyle(feature));
+                            restyleBuilding(layer, feature);
                         });
                     },
                 }).addTo(map);
                 updateStats(geojson);
                 showJobsLegend();
                 setStatus(`Učitano ${geojson.features.length.toLocaleString()} zgrada. Kliknite na zgradu za pregled/uređivanje.`);
+                return true;
             } catch (e) {
                 console.error(e);
                 setStatus(`Greška pri učitavanju s ${API_BASE}. Je li server pokrenut?`, true);
+            }
+            return false;
+        }
+
+        // Fetch a margin beyond the visible map. Without it every pan, however small, exposes
+        // a sliver of unloaded area and forces a refetch; with it, short pans stay inside what
+        // is already drawn. The same padded box is recorded as the coverage of the layer.
+        const VIEWPORT_PAD = 0.25;
+        function fetchBounds() { return map.getBounds().pad(VIEWPORT_PAD); }
+
+        // ─── One loader for both modes, and the things that trigger it ───────
+        let loadInFlight = false;
+        // What the drawn layer actually covers: {key, bounds}. Lets a pan inside already
+        // loaded area skip the refetch entirely.
+        let lastLoad = null;
+
+        function setLoadingUI(busy) {
+            modeFieldBtn.disabled = busy;
+            modeAllBtn.disabled = busy || map.getZoom() < MIN_ZOOM_ALL;
+            fieldSelect.disabled = busy || viewMode !== 'field';
+        }
+
+        async function loadCurrentView() {
+            if (loadInFlight) return;
+            loadInFlight = true;
+            setLoadingUI(true);
+            setStatus('Učitavanje...');
+            const key = currentViewKey();
+            const bounds = fetchBounds();
+            try {
+                // Only a load that actually drew something counts as covering this viewport.
+                // A zoom hint or an error draws nothing, and recording it would suppress the
+                // reload that finally could succeed — the new bounds sit inside the old ones.
+                const drew = viewMode === 'all' ? await loadAllView() : await loadFieldView();
+                lastLoad = drew ? { key, bounds } : null;
             } finally {
-                loadAllBtn.textContent = 'Sve zgrade';
+                loadInFlight = false;
+                setLoadingUI(false);
                 updateZoomUI();
             }
+        }
+
+        function setViewMode(mode) {
+            if (viewMode === mode) return;
+            viewMode = mode;
+            applyModeButtons();
+            loadCurrentView();
+        }
+
+        modeFieldBtn.addEventListener('click', () => setViewMode('field'));
+        modeAllBtn.addEventListener('click', () => setViewMode('all'));
+
+        // Selecting a field IS the request — no second click.
+        fieldSelect.addEventListener('change', () => {
+            if (viewMode !== 'field') { viewMode = 'field'; applyModeButtons(); }
+            loadCurrentView();
         });
+
+        // Reload for the new viewport after panning/zooming, so what is drawn always matches
+        // what is on screen. Debounced, and skipped while a popup is open: a reload rebuilds
+        // the layer and would close the popup out from under whoever is reading it.
+        const RELOAD_DEBOUNCE_MS = 400;
+        let reloadTimer = null;
+
+        function currentViewKey() {
+            return viewMode === 'all' ? 'all' : `field:${fieldSelect.value}`;
+        }
+
+        function scheduleViewReload() {
+            if (reloadTimer) clearTimeout(reloadTimer);
+            reloadTimer = setTimeout(() => {
+                reloadTimer = null;
+                if (currentDetail && document.querySelector('.bld-popup')) return;
+                // Nothing new to fetch if what is already drawn covers the new viewport —
+                // which is every zoom-in and every small pan. At zoom 17 a reload is a few
+                // thousand polygons, so this is the difference between usable and not.
+                if (lastLoad && lastLoad.key === currentViewKey()
+                    && lastLoad.bounds.contains(map.getBounds())) return;
+                loadCurrentView();
+            }, RELOAD_DEBOUNCE_MS);
+        }
+
+        map.on('moveend', scheduleViewReload);
+        map.on('zoomend', updateZoomUI);
+        applyModeButtons();
+        updateZoomUI();
 
         // ─── Deep linking: /zgrade/{cadastreId} ──────────────────────────────
 
@@ -1505,6 +2137,10 @@
                 const geojson = await bldRes.json();
                 clearLayers();
                 currentMode = 'all';
+                // A deep link loads every building around the target, so the switch has to say
+                // 'Sve zgrade' — otherwise the header would describe a view that isn't on screen.
+                viewMode = 'all';
+                applyModeButtons();
                 let hoveredLayer = null;
                 let targetLayer = null;
                 buildingsLayer = L.geoJSON(geojson, {
@@ -1517,15 +2153,15 @@
                         layer.on('click', () => onBuildingClick(feature, layer));
                         layer.on('mouseover', () => {
                             if (hoveredLayer && hoveredLayer !== layer) {
-                                hoveredLayer.setStyle(buildingStyle(hoveredLayer.feature));
+                                restyleBuilding(hoveredLayer, hoveredLayer.feature);
                             }
                             hoveredLayer = layer;
-                            layer.setStyle({ weight: 3, fillOpacity: 0.6 });
+                            highlightBuilding(layer);
                             layer.bringToFront();
                         });
                         layer.on('mouseout', () => {
                             if (hoveredLayer === layer) hoveredLayer = null;
-                            layer.setStyle(buildingStyle(feature));
+                            restyleBuilding(layer, feature);
                         });
                         // Find our target building
                         if (feature.properties.cadastre_building_id === cadastreId) {
@@ -1555,8 +2191,8 @@
                 setTimeout(() => openBuildingByDeepLink(id), 200);
                 return;
             }
-            // Auto-load default view: "Zgrade s radnim mjestima" (jobs is preselected)
-            map.whenReady(() => loadFieldBtn.click());
+            // Auto-load the default view: colour by jobs (preselected in the picker)
+            map.whenReady(() => loadCurrentView());
         })();
     </script>
 </body>
