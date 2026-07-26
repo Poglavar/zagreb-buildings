@@ -10,7 +10,7 @@
 // Loaded lazily by index.html when the dialog is first opened (three.js is ~700 KB).
 
 import * as THREE from 'three';
-import { makeProjector, ringToLocal, localBounds, meshToPositions, overtureExtrusionHeight } from './geo-local.js';
+import { makeProjector, ringToLocal, localBounds, meshToPositions, overtureExtrusionHeight, shapeXYFromLocal } from './geo-local.js';
 
 // Same colours as the map outline toggles, so a footprint means the same thing in both views.
 export const MODEL_COLORS = {
@@ -21,12 +21,13 @@ export const MODEL_COLORS = {
 
 const SLAB_THICKNESS_M = 0.15;   // visible thickness for a source that reports no height
 
-// A three.js Shape from local {x, z} points. Shape works in 2D (x, y); the mesh is rotated flat
-// afterwards, so the shape's y is the scene's z.
+// A three.js Shape from local {x, z} points. Shape is XY; after rotateX(-π/2) extrusion
+// is +Y. shapeXYFromLocal negates z so the footprint is not mirrored vs parcels/mesh.
 function shapeFromPoints(points) {
+    const xy = shapeXYFromLocal(points);
     const shape = new THREE.Shape();
-    shape.moveTo(points[0].x, points[0].z);
-    for (let i = 1; i < points.length; i++) shape.lineTo(points[i].x, points[i].z);
+    shape.moveTo(xy[0].x, xy[0].y);
+    for (let i = 1; i < xy.length; i++) shape.lineTo(xy[i].x, xy[i].y);
     shape.closePath();
     return shape;
 }

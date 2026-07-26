@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     metresPerDegree, makeProjector, ringToLocal, ringArea, localBounds,
-    meshToPositions, overtureExtrusionHeight,
+    meshToPositions, overtureExtrusionHeight, shapeXYFromLocal,
 } from './geo-local.js';
 
 const ZG_LAT = 45.8186;
@@ -127,4 +127,15 @@ test('overtureExtrusionHeight prefers height, falls back to floors, else null', 
     assert.equal(overtureExtrusionHeight({ height_m: null, num_floors: null }), null);
     assert.equal(overtureExtrusionHeight({ height_m: 0, num_floors: 0 }), null);
     assert.equal(overtureExtrusionHeight(null), null);
+});
+
+test('shapeXYFromLocal negates z so ExtrudeGeometry+rotateX matches scene z', () => {
+    // After rotateX(-π/2), shape (sx,sy,0) → scene (sx, 0, -sy). Feeding y=-z means
+    // scene z = -(-z) = z, same as parcel lines and the GDI mesh.
+    const xy = shapeXYFromLocal([{ x: 3, z: 5 }, { x: 4, z: -2 }, { x: 1, z: 0 }]);
+    assert.equal(xy.length, 3);
+    assert.equal(xy[0].x, 3); assert.equal(xy[0].y, -5);
+    assert.equal(xy[1].x, 4); assert.equal(xy[1].y, 2);
+    assert.equal(xy[2].x, 1); assert.equal(xy[2].y + 0, 0); // +0 kills -0 from unary minus
+    assert.deepEqual(shapeXYFromLocal([{ x: 1, z: 1 }]), []);
 });

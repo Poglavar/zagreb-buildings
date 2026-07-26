@@ -40,6 +40,16 @@ export function ringToLocal(ring, project) {
     return pts;
 }
 
+// Local {x, z} (x east, z south) → 2D coords for THREE.ExtrudeGeometry's Shape.
+// ExtrudeGeometry builds in the XY plane and is then rotateX(-π/2)'d so extrusion
+// becomes +Y. That rotation maps shape-Y → scene −Z, so we feed −z as shape-Y —
+// otherwise footprints come out mirrored north/south relative to parcels and the
+// GDI mesh (which write three.js Z = local z directly).
+export function shapeXYFromLocal(points) {
+    if (!Array.isArray(points) || points.length < 3) return [];
+    return points.map(p => ({ x: p.x, y: -p.z }));
+}
+
 // Signed-area magnitude of a local ring, in m². Used to sanity-check a projected footprint
 // against the area the database reports for the same polygon.
 export function ringArea(points) {

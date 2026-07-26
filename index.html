@@ -322,6 +322,18 @@
         .stats-bar { display: flex; gap: 16px; font-size: 12px; color: #555; }
         .stats-bar strong { color: #222; }
 
+        .analysis-list { display: flex; flex-direction: column; gap: 8px; }
+        .analysis-opt {
+            display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+            text-align: left; padding: 10px 12px; border: 1px solid #dee2e6; border-radius: 6px;
+            background: #fff; cursor: pointer; width: 100%; font: inherit;
+        }
+        .analysis-opt:hover { background: #f8f9fa; border-color: #adb5bd; }
+        .analysis-opt.active { border-color: #e67700; background: #fff9db; }
+        .analysis-opt strong { font-size: 13px; color: #212529; }
+        .analysis-opt span { font-size: 11px; color: #868e96; line-height: 1.4; }
+        #analysisBtn.active { background: #e67700; color: #fff; border-color: #e67700; }
+
         /* Classification modal */
         .modal-overlay {
             display: none; position: fixed; inset: 0; z-index: 10000;
@@ -443,7 +455,7 @@
             </a>
             <h1 style="display:flex;align-items:center;gap:6px;">Zgrade Zagreba <button onclick="document.getElementById('aboutModal').classList.add('open')" style="background:none;border:1px solid #ccc;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:1;cursor:pointer;padding:0;color:#868e96;display:inline-flex;align-items:center;justify-content:center;" title="O stranici">i</button></h1>
             <span class="mode-switch" role="group" aria-label="Način prikaza">
-                <button id="modeFieldBtn" class="mode-btn active" aria-pressed="true">Boja po polju</button>
+                <button id="modeFieldBtn" class="mode-btn active" aria-pressed="true">Tematski</button>
                 <button id="modeAllBtn" class="mode-btn" aria-pressed="false">Sve zgrade</button>
             </span>
             <select id="fieldSelect" style="padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:13px;">
@@ -457,6 +469,7 @@
             </select>
             <div class="stats-bar" id="statsBar"></div>
             <div class="legend" id="legend"></div>
+            <button type="button" id="analysisBtn" class="secondary" title="Karte kvalitete izvora">Analiza</button>
             <button onclick="document.getElementById('classModal').classList.add('open')">Klasifikacija</button>
             <a href="https://github.com/Poglavar/zagreb-buildings" target="_blank" rel="noopener" title="Pogledaj na GitHubu" style="display:flex;margin-left:4px;color:#333;">
                 <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -513,6 +526,36 @@
                 <button onclick="document.getElementById('classModal').classList.remove('open')">&times;</button>
             </div>
             <div class="modal-body" id="classModalBody"></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="analysisModal" onclick="if(event.target===this)this.classList.remove('open')">
+        <div class="modal" style="max-width:520px;">
+            <div class="modal-header">
+                <h2>Analiza izvora</h2>
+                <button type="button" onclick="document.getElementById('analysisModal').classList.remove('open')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-top:0;">Karte razlika između katastra (DGU), fotogrametrije (GDI, snimka do 2022.) i Overture/OSM obrisa. Zumirajte na 15+ pa odaberite sloj.</p>
+                <div class="analysis-list">
+                    <button type="button" class="analysis-opt" data-kind="no_gdi">
+                        <strong>Bez GDI modela</strong>
+                        <span>Katastarska zgrada bez GDI zgrade na istom mjestu</span>
+                    </button>
+                    <button type="button" class="analysis-opt" data-kind="post_gdi">
+                        <strong>Nove u katastru (nakon praćenja)</strong>
+                        <span>Zgrade prvi put viđene nakon baseline-a DGU osvježavanja — približnica za gradnju nakon GDI 2022.</span>
+                    </button>
+                    <button type="button" class="analysis-opt" data-kind="larger_than_gdi">
+                        <strong>Veći obris od GDI</strong>
+                        <span>Katastar ili Overture ≥30% veći od GDI otiska</span>
+                    </button>
+                </div>
+                <p id="analysisActiveNote" style="margin:12px 0 0;font-size:11px;color:#868e96;"></p>
+                <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end;">
+                    <button type="button" id="analysisClearBtn" class="secondary">Isključi analizu</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -950,7 +993,18 @@
         // field, 'all' loads everything with full detail. Switching either the mode or the
         // field loads immediately — the old UI made you press a separate button, so changing
         // the dropdown appeared to do nothing.
-        let viewMode = 'field';
+        let viewMode = 'field'; // 'field' | 'all' | 'analysis'
+        let analysisKind = null; // null | 'no_gdi' | 'post_gdi' | 'larger_than_gdi'
+        const ANALYSIS_LABELS = {
+            no_gdi: 'Bez GDI modela',
+            post_gdi: 'Nove u katastru',
+            larger_than_gdi: 'Veći obris od GDI',
+        };
+        const ANALYSIS_COLORS = {
+            no_gdi: '#c92a2a',
+            post_gdi: '#e67700',
+            larger_than_gdi: '#9c36b5',
+        };
         let fieldCoverage = null;   // field → number of buildings citywide that have a value
 
         function fieldAvailableAtZoom(field, zoom) {
@@ -1007,6 +1061,17 @@
                 btn.setAttribute('aria-pressed', String(active));
             }
             fieldSelect.disabled = viewMode !== 'field';
+            const analysisBtn = document.getElementById('analysisBtn');
+            if (analysisBtn) analysisBtn.classList.toggle('active', viewMode === 'analysis');
+            document.querySelectorAll('.analysis-opt').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.kind === analysisKind);
+            });
+            const note = document.getElementById('analysisActiveNote');
+            if (note) {
+                note.textContent = analysisKind
+                    ? `Aktivno: ${ANALYSIS_LABELS[analysisKind] || analysisKind}. Pan/zoom učitava sloj iznova.`
+                    : '';
+            }
         }
 
         // Coverage is a property of the dataset, so it is fetched once. Failure is silent by
@@ -1458,18 +1523,25 @@
             if (el && el.classList) el.classList.toggle('selected-building', !!on);
         }
 
+        function styleForFeature(feature) {
+            if (viewMode === 'analysis' || (feature && feature.properties && feature.properties.analysis)) {
+                return analysisStyle(feature);
+            }
+            return buildingStyle(feature);
+        }
+
         function restyleBuilding(layer, feature) {
             if (!layer || !layer.setStyle) return;
             const f = feature || layer.feature;
             if (layer === selectedLayer) {
                 layer.setStyle(cadastreOutlineVisible
-                    ? { ...buildingStyle(f), ...CADASTRE_SELECTED_STYLE }
+                    ? { ...styleForFeature(f), ...CADASTRE_SELECTED_STYLE }
                     : CADASTRE_HIDDEN_STYLE);
                 // Hidden means hidden: a glow around an invisible outline makes no sense.
                 markSelectedElement(layer, cadastreOutlineVisible);
                 return;
             }
-            layer.setStyle(buildingStyle(f));
+            layer.setStyle(styleForFeature(f));
             markSelectedElement(layer, false);
         }
 
@@ -1632,7 +1704,7 @@
             try {
                 const [res, module] = await Promise.all([
                     fetch(`${API_BASE}/api/building/${cadastreId}/models3d`),
-                    import('./js/building-3d.js?v=1'),
+                    import('./js/building-3d.js?v=2'),
                 ]);
                 if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
                 const data = await res.json();
@@ -2012,6 +2084,94 @@
             return false;
         }
 
+        // ─── Source-gap analysis layers ──────────────────────────────────────
+        function analysisStyle(feature) {
+            const kind = feature.properties.analysis || analysisKind;
+            const color = ANALYSIS_COLORS[kind] || '#c92a2a';
+            return {
+                color, weight: 1.5, opacity: 0.95,
+                fillColor: color, fillOpacity: 0.45,
+            };
+        }
+
+        async function loadAnalysisView() {
+            if (!analysisKind) return false;
+            if (map.getZoom() < MIN_ZOOM_POLYGONS) {
+                setStatus(`Zumirajte na razinu ${MIN_ZOOM_POLYGONS}+ za analizu „${ANALYSIS_LABELS[analysisKind]}”.`);
+                return false;
+            }
+            const b = fetchBounds();
+            const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+            try {
+                const res = await fetch(`${API_BASE}/api/buildings/analysis?kind=${encodeURIComponent(analysisKind)}&bbox=${bbox}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const geojson = await res.json();
+                clearLayers();
+                currentMode = 'analysis';
+                let hoveredLayer = null;
+                buildingsLayer = L.geoJSON(geojson, {
+                    style: analysisStyle,
+                    onEachFeature: (feature, layer) => {
+                        layer._bldPopup = new RightPopup({
+                            maxWidth: 500, minWidth: window.innerWidth <= 600 ? 280 : 460,
+                            autoPan: false, className: 'popup-right',
+                        });
+                        layer.on('click', () => onBuildingClick(feature, layer));
+                        layer.on('mouseover', () => {
+                            if (hoveredLayer && hoveredLayer !== layer) {
+                                hoveredLayer.setStyle(analysisStyle(hoveredLayer.feature));
+                            }
+                            hoveredLayer = layer;
+                            highlightBuilding(layer);
+                            layer.bringToFront();
+                        });
+                        layer.on('mouseout', () => {
+                            if (hoveredLayer === layer) hoveredLayer = null;
+                            layer.setStyle(analysisStyle(feature));
+                        });
+                    },
+                }).addTo(map);
+
+                const color = ANALYSIS_COLORS[analysisKind];
+                legendEl.innerHTML = `
+                    <div class="legend-item"><span class="legend-swatch" style="background:${color}"></span>
+                    ${escapeHtml(ANALYSIS_LABELS[analysisKind])}</div>`;
+                statsBar.innerHTML = `<span><strong>${geojson.features.length.toLocaleString('hr-HR')}</strong> u prikazu</span>`;
+
+                const metaMsg = geojson.meta && geojson.meta.message;
+                if (metaMsg) {
+                    setStatus(metaMsg);
+                } else {
+                    setStatus(`Analiza „${ANALYSIS_LABELS[analysisKind]}”: ${geojson.features.length.toLocaleString('hr-HR')} zgrada.`);
+                }
+                return true;
+            } catch (e) {
+                console.error(e);
+                setStatus(`Greška pri učitavanju analize s ${API_BASE}.`, true);
+            }
+            return false;
+        }
+
+        function setAnalysisKind(kind) {
+            analysisKind = kind;
+            viewMode = 'analysis';
+            applyModeButtons();
+            document.getElementById('analysisModal').classList.remove('open');
+            loadCurrentView();
+        }
+
+        function clearAnalysis() {
+            analysisKind = null;
+            if (viewMode === 'analysis') {
+                viewMode = 'field';
+                applyModeButtons();
+                loadCurrentView();
+            } else {
+                applyModeButtons();
+            }
+            document.getElementById('analysisModal').classList.remove('open');
+        }
+
         // Fetch a margin beyond the visible map. Without it every pan, however small, exposes
         // a sliver of unloaded area and forces a refetch; with it, short pans stay inside what
         // is already drawn. The same padded box is recorded as the coverage of the layer.
@@ -2028,6 +2188,8 @@
             modeFieldBtn.disabled = busy;
             modeAllBtn.disabled = busy || map.getZoom() < MIN_ZOOM_ALL;
             fieldSelect.disabled = busy || viewMode !== 'field';
+            const analysisBtn = document.getElementById('analysisBtn');
+            if (analysisBtn) analysisBtn.disabled = busy;
         }
 
         async function loadCurrentView() {
@@ -2041,7 +2203,10 @@
                 // Only a load that actually drew something counts as covering this viewport.
                 // A zoom hint or an error draws nothing, and recording it would suppress the
                 // reload that finally could succeed — the new bounds sit inside the old ones.
-                const drew = viewMode === 'all' ? await loadAllView() : await loadFieldView();
+                let drew;
+                if (viewMode === 'analysis') drew = await loadAnalysisView();
+                else if (viewMode === 'all') drew = await loadAllView();
+                else drew = await loadFieldView();
                 lastLoad = drew ? { key, bounds } : null;
             } finally {
                 loadInFlight = false;
@@ -2051,7 +2216,8 @@
         }
 
         function setViewMode(mode) {
-            if (viewMode === mode) return;
+            if (viewMode === mode && mode !== 'analysis') return;
+            if (mode !== 'analysis') analysisKind = null;
             viewMode = mode;
             applyModeButtons();
             loadCurrentView();
@@ -2060,9 +2226,17 @@
         modeFieldBtn.addEventListener('click', () => setViewMode('field'));
         modeAllBtn.addEventListener('click', () => setViewMode('all'));
 
+        document.getElementById('analysisBtn').addEventListener('click', () => {
+            document.getElementById('analysisModal').classList.add('open');
+        });
+        document.getElementById('analysisClearBtn').addEventListener('click', () => clearAnalysis());
+        document.querySelectorAll('.analysis-opt').forEach(btn => {
+            btn.addEventListener('click', () => setAnalysisKind(btn.dataset.kind));
+        });
+
         // Selecting a field IS the request — no second click.
         fieldSelect.addEventListener('change', () => {
-            if (viewMode !== 'field') { viewMode = 'field'; applyModeButtons(); }
+            if (viewMode !== 'field') { viewMode = 'field'; analysisKind = null; applyModeButtons(); }
             loadCurrentView();
         });
 
@@ -2073,6 +2247,7 @@
         let reloadTimer = null;
 
         function currentViewKey() {
+            if (viewMode === 'analysis') return `analysis:${analysisKind || ''}`;
             return viewMode === 'all' ? 'all' : `field:${fieldSelect.value}`;
         }
 
@@ -2108,14 +2283,23 @@
         window.addEventListener('popstate', () => {
             const id = parseCadastreIdFromPath();
             if (id) {
-                openBuildingByDeepLink(id);
+                openBuildingByDeepLink(id, { open3d: wants3dFromUrl() });
             } else {
                 map.closePopup();
+                window.closeBuilding3d();
             }
         });
 
+        function wants3dFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            if (!params.has('3d')) return false;
+            const v = params.get('3d');
+            // bare ?3d, &3d, ?3d=1, ?3d=true all open the dialog; ?3d=0 / false do not
+            return v === '' || v === '1' || v === 'true' || v === 'yes';
+        }
+
         // Open a building by cadastre ID (for deep links and popstate)
-        async function openBuildingByDeepLink(cadastreId) {
+        async function openBuildingByDeepLink(cadastreId, { open3d = false } = {}) {
             setStatus('Učitavanje zgrade...');
             try {
                 // 1. Fetch building detail to get coordinates
@@ -2140,6 +2324,7 @@
                 // A deep link loads every building around the target, so the switch has to say
                 // 'Sve zgrade' — otherwise the header would describe a view that isn't on screen.
                 viewMode = 'all';
+                analysisKind = null;
                 applyModeButtons();
                 let hoveredLayer = null;
                 let targetLayer = null;
@@ -2173,9 +2358,11 @@
 
                 // 4. Programmatically click the target building
                 if (targetLayer) {
-                    onBuildingClick(targetLayer.feature, targetLayer);
+                    await onBuildingClick(targetLayer.feature, targetLayer);
+                    if (open3d) window.openBuilding3d(cadastreId);
                 } else {
                     setStatus('Zgrada učitana, ali poligon nije pronađen u ovom području.');
+                    if (open3d) window.openBuilding3d(cadastreId);
                 }
             } catch (e) {
                 console.error(e);
@@ -2183,12 +2370,13 @@
             }
         }
 
-        // On page load: check for deep link
+        // On page load: check for deep link (path id and optional ?3d)
         (() => {
             const id = parseCadastreIdFromPath();
             if (id) {
+                const open3d = wants3dFromUrl();
                 // Small delay to ensure map is fully initialized
-                setTimeout(() => openBuildingByDeepLink(id), 200);
+                setTimeout(() => openBuildingByDeepLink(id, { open3d }), 200);
                 return;
             }
             // Auto-load the default view: colour by jobs (preselected in the picker)
