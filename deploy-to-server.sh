@@ -25,13 +25,30 @@ SSH_CMD="ssh ${SERVER_USER}@${SERVER_HOST} -i ${SSH_KEY}"
 
 echo "=== Deploying zagreb-buildings to ${SERVER_HOST} ==="
 
-# 1. Clone or pull the repo
+# 1. Clone or pull the repo.
+# The remote must be the server's SSH alias, not HTTPS: the nightly export cron
+# (scripts/commit-claims.sh) pushes data/claims.json back to GitHub, and the
+# server has no HTTPS credentials.
+REMOTE_URL="git@github-personal:Poglavar/zagreb-buildings.git"
 echo "Pulling latest code..."
 ${SSH_CMD} "
+    set -e
     if [ ! -d ${REPO_PATH} ]; then
-        git clone https://github.com/Poglavar/zagreb-buildings.git ${REPO_PATH}
+        git clone ${REMOTE_URL} ${REPO_PATH}
     fi
-    cd ${REPO_PATH} && git pull
+    cd ${REPO_PATH}
+    git remote set-url origin ${REMOTE_URL}
+    git pull
+"
+
+# 1b. Install production dependencies.
+# scripts/export-claims.js needs pg + dotenv; without this the nightly cron dies
+# with 'Cannot find module pg' and nothing but the PM2 error log notices.
+echo "Installing dependencies..."
+${SSH_CMD} "
+    set -e
+    cd ${REPO_PATH}
+    npm ci --omit=dev
 "
 
 # 2. Copy viewer.html to web root
