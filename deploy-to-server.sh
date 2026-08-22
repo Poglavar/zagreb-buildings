@@ -51,6 +51,15 @@ ${SSH_CMD} "
     npm ci --omit=dev
 "
 
+# 1c. Publish the claims export to the docroot, so a deploy cannot leave a stale
+# copy behind. The nightly cron does the same after each export.
+echo "Publishing claims export..."
+${SSH_CMD} "
+    set -e
+    cd ${REPO_PATH}
+    scripts/publish-claims.sh
+"
+
 # 2. Copy viewer.html to web root
 echo "Deploying frontend..."
 ${SSH_CMD} "

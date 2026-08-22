@@ -7,6 +7,10 @@ cd "$(dirname "$0")/.."
 
 node scripts/export-claims.js
 
+# Refresh the public copy even when the content is unchanged — the docroot can be
+# stale (an old deploy, a rollback) while the DB has not moved.
+scripts/publish-claims.sh
+
 if git diff --quiet data/claims.json 2>/dev/null; then
     echo "No changes to claims."
 else
