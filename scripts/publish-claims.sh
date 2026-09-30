@@ -18,6 +18,9 @@ fi
 
 # The temp file must sit on the destination filesystem, otherwise mv is a
 # copy+unlink and a reader can catch a half-written file.
-cp data/claims.json "$DOCROOT_DATA/.claims.json.tmp"
-mv -f "$DOCROOT_DATA/.claims.json.tmp" "$DOCROOT_DATA/claims.json"
-echo "Published claims.json to $DOCROOT_DATA ($(wc -c < data/claims.json) bytes)."
+# The manifest goes last: a reader that sees a new manifest finds the claims.json it describes.
+for f in claims.json claims.manifest.json; do
+    cp "data/$f" "$DOCROOT_DATA/.$f.tmp"
+    mv -f "$DOCROOT_DATA/.$f.tmp" "$DOCROOT_DATA/$f"
+done
+echo "Published claims.json and claims.manifest.json to $DOCROOT_DATA ($(wc -c < data/claims.json) bytes)."

@@ -4,10 +4,8 @@
   "private": true,
   "description": "Public building-level database of Zagreb with job estimation and editing tools",
   "scripts": {
-    "test": "node --test js/*.test.mjs",
-    "start": "node scripts/server.js",
-    "estimate-jobs": "node scripts/estimate-jobs.js",
-"build-3d-match": "node scripts/build-3d-match.js"
+    "test": "node --test js/*.test.mjs scripts/*.test.mjs",
+    "start": "node scripts/dev-server.js --port 8099"
   },
   "dependencies": {
     "dotenv": "^16.0.0",

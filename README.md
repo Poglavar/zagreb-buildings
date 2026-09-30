@@ -25,7 +25,7 @@ Sva tri geometrijska izvora mogu se istovremeno prikazati na karti (`Tlocrt:` pr
 
 Preglednik je samostalna HTML datoteka (`index.html`) koja komunicira s dijeljenim API-jem. U produkciji se servira kao statički sadržaj na `https://zagreb.lol/zgrade`, a nginx prosljeđuje `/zgrade/api/` na API server.
 
-Za lokalni rad poslužite direktorij preko HTTP-a (npr. `npx http-server . -p 8097 -c-1`) i otvorite `http://localhost:8097/` — podrazumijevano koristi `localhost:3001` za API, a drugi se može zadati s `?apiBase=`. 3D dijalog učitava `js/` kao ES module, pa ne radi kad se `index.html` otvori kao `file://`.
+Za lokalni rad pokrenite `npm start` (poslužitelj bez cachea, `/<id zgrade>` vraća `index.html` pa osvježavanje na otvorenoj zgradi radi) i otvorite `http://localhost:8099/` — podrazumijevano koristi `localhost:3001` za API, a drugi se može zadati s `?apiBase=`. 3D dijalog učitava `js/` kao ES module, pa ne radi kad se `index.html` otvori kao `file://`.
 
 ## Baza podataka
 
@@ -54,7 +54,8 @@ API se servira putem dijeljenog `cadastre-data/api` servera (Hono). Endpointi za
 | `GET /api/building/:cadastre_id`          | Spojeni detalji iz svih izvora + GDI objekt i njegov tlocrt |
 | `GET /api/building/:cadastre_id/models3d` | Tri geometrijska zapisa iste zgrade za 3D usporedbu  |
 | `GET /api/building-by-object/:object_id`  | Obrnuti smjer: iz GDI objekta u katastarske zgrade i čestice |
-| `POST /api/claims`                        | Unos korisničkog podatka (ograničen brojem zahtjeva) |
+| `GET /api/claim-rules`                    | Ograničenja vrijednosti po polju (iste koje poslužitelj provodi) |
+| `POST /api/claims`                        | Unos korisničkog podatka (ograničen brojem zahtjeva). Šalje se `contributor` (ime); izvor poslužitelj sprema kao `user:<ime>` i nitko drugi ne može prepisati taj unos |
 
 ## Deploy
 
